@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.dto; import jakarta.validation.constraints.*; public record AnalistaRequest(@NotBlank @Size(max=150) String nombre,@NotBlank @Email String email,@NotBlank @Size(max=30) String codigo){}

@@ -1,0 +1,4 @@
+package pe.org.camaracomercioica.protestos.model;
+import jakarta.persistence.*; import lombok.*; import java.math.BigDecimal; import java.time.LocalDate;
+@Entity @Table(name="protestos") @Getter @Setter @NoArgsConstructor
+public class Protesto { @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id; @ManyToOne(optional=false) @JoinColumn(name="entidad_id") private EntidadFinanciera entidad; @Column(nullable=false,length=20) private String numeroDocumento; @Column(nullable=false,length=150) private String nombreDeudor; @Column(nullable=false,length=50) private String tipoTitulo; @Column(nullable=false,precision=14,scale=2) private BigDecimal monto; @Column(nullable=false,length=3) private String moneda; @Column(nullable=false) private LocalDate fechaProtesto; @Column(nullable=false) private boolean vigente=true; }

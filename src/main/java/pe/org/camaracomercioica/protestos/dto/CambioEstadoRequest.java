@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.dto; import jakarta.validation.constraints.NotNull; import jakarta.validation.constraints.Size; import pe.org.camaracomercioica.protestos.model.EstadoSolicitud; public record CambioEstadoRequest(@NotNull EstadoSolicitud estado,@Size(max=1000) String observacion,Long analistaId){}

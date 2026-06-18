@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.dto; import java.time.Instant; import java.util.List; public record LoginResponse(String accessToken,String tokenType,Instant expiresAt,UserView usuario){ public record UserView(Long id,String nombre,String email,List<String> roles){} }

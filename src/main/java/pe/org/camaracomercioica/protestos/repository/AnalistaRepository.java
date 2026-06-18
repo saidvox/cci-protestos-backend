@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.repository; import org.springframework.data.jpa.repository.JpaRepository; import pe.org.camaracomercioica.protestos.model.Analista; public interface AnalistaRepository extends JpaRepository<Analista,Long>{ boolean existsByCodigo(String codigo); }

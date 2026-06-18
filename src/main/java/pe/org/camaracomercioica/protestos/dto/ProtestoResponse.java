@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.dto; import java.math.BigDecimal; import java.time.LocalDate; public record ProtestoResponse(Long id,String numeroDocumento,String nombreDeudor,String entidad,String tipoTitulo,BigDecimal monto,String moneda,LocalDate fechaProtesto,boolean vigente){}

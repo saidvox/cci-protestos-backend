@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.dto; import java.time.Instant; public record AuditoriaResponse(Long id,String actor,String accion,String recurso,String recursoId,String detalle,Instant fecha){}

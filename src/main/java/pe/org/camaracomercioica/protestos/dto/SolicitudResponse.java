@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.dto; import pe.org.camaracomercioica.protestos.model.*; import java.time.Instant; public record SolicitudResponse(Long id,String codigo,String solicitante,String entidad,String analista,EstadoSolicitud estado,String motivo,String observacion,Instant creadoEn,Instant actualizadoEn){}

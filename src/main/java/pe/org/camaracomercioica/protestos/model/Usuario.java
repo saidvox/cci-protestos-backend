@@ -1,0 +1,4 @@
+package pe.org.camaracomercioica.protestos.model;
+import jakarta.persistence.*; import lombok.*; import java.time.Instant;
+@Entity @Table(name="usuarios") @Getter @Setter @NoArgsConstructor
+public class Usuario { @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id; @Column(nullable=false,length=150) private String nombreCompleto; @Column(nullable=false,unique=true,length=150) private String email; @Column(nullable=false,length=100) private String passwordHash; @ManyToOne(optional=false,fetch=FetchType.EAGER) @JoinColumn(name="rol_id") private Rol rol; @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="entidad_id") private EntidadFinanciera entidad; @Column(nullable=false) private boolean activo=true; @Column(nullable=false,updatable=false) private Instant creadoEn=Instant.now(); }

@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.repository; import org.springframework.data.jpa.repository.JpaRepository; import pe.org.camaracomercioica.protestos.model.Documento; public interface DocumentoRepository extends JpaRepository<Documento,Long>{}

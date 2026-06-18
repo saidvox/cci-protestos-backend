@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.repository; import org.springframework.data.jpa.repository.JpaRepository; import pe.org.camaracomercioica.protestos.model.Rol; import java.util.Optional; public interface RolRepository extends JpaRepository<Rol,Long>{ Optional<Rol> findByNombre(String nombre); }
