@@ -1,1 +1,1 @@
-package pe.org.camaracomercioica.protestos.dto; import jakarta.validation.constraints.*; public record SolicitudRequest(@NotNull Long entidadId,@NotBlank @Size(max=1000) String motivo){}
+package pe.org.camaracomercioica.protestos.dto; import jakarta.validation.constraints.*; import java.math.BigDecimal; public record SolicitudRequest(@NotNull Long entidadId,@NotBlank @Size(max=1000) String motivo,@NotBlank @Size(max=30) String documentoDeudor,@NotNull @DecimalMin("0.01") BigDecimal montoProtestado){}

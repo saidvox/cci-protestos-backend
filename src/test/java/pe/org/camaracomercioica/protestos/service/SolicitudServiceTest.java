@@ -28,7 +28,7 @@ class SolicitudServiceTest {
     when(usuarios.findByEmailIgnoreCase("entidad@test.local")).thenReturn(Optional.of(user));
     when(entidades.findById(20L)).thenReturn(Optional.of(otra));
     var service=new SolicitudService(solicitudes,usuarios,entidades,analistas,auditoria);
-    assertThatThrownBy(()->service.crear(new pe.org.camaracomercioica.protestos.dto.SolicitudRequest(20L,"Motivo"),"entidad@test.local")).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(()->service.crear(new pe.org.camaracomercioica.protestos.dto.SolicitudRequest(20L,"Motivo","12345678",new java.math.BigDecimal("1500.00")),"entidad@test.local")).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     verify(solicitudes,never()).save(any());
   }
 }
