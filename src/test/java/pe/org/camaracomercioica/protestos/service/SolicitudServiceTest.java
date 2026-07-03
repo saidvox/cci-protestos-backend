@@ -14,20 +14,22 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SolicitudServiceTest {
-  @Mock SolicitudRepository solicitudes; @Mock UsuarioRepository usuarios; @Mock EntidadFinancieraRepository entidades; @Mock AnalistaRepository analistas; @Mock AuditoriaService auditoria;
+  @Mock SolicitudRepository solicitudes; @Mock UsuarioRepository usuarios; @Mock EntidadFinancieraRepository entidades; @Mock AnalistaRepository analistas; @Mock DeudorRepository deudores; @Mock AuditoriaService auditoria;
   @Test void rechazaCambioInvalido() {
-    Solicitud s = new Solicitud(); s.setId(1L); s.setEstado(EstadoSolicitud.APROBADA);
+    Solicitud s = new Solicitud(); s.setId(1L); s.setEstado(EstadoSolicitud.APROBADA_ENTIDAD);
+    var role = new Rol(); role.setNombre("CCI_ADMIN"); var user = new Usuario(); user.setId(1L); user.setRol(role);
+    when(usuarios.findByEmailIgnoreCase("admin@demo.pe")).thenReturn(Optional.of(user));
     when(solicitudes.findById(1L)).thenReturn(Optional.of(s));
-    var service = new SolicitudService(solicitudes, usuarios, entidades, analistas, auditoria);
-    assertThatThrownBy(() -> service.cambiarEstado(1L, new CambioEstadoRequest(EstadoSolicitud.EN_REVISION, null, null), "admin@demo.pe")).isInstanceOf(BadRequestException.class);
+    var service = new SolicitudService(solicitudes, usuarios, entidades, analistas, deudores, auditoria);
+    assertThatThrownBy(() -> service.cambiarEstado(1L, new CambioEstadoRequest(EstadoSolicitud.EN_REVISION_CCI, null, null), "admin@demo.pe")).isInstanceOf(BadRequestException.class);
     verify(solicitudes, never()).save(any());
   }
   @Test void entidadSoloPuedeCrearParaSuPropiaEntidad() {
-    var role=new Rol(); role.setNombre("ENTIDAD"); var propia=new EntidadFinanciera(); propia.setId(10L); var otra=new EntidadFinanciera(); otra.setId(20L);
+    var role=new Rol(); role.setNombre("BANK_ANALYST"); var propia=new EntidadFinanciera(); propia.setId(10L); var otra=new EntidadFinanciera(); otra.setId(20L);
     var user=new Usuario(); user.setRol(role); user.setEntidad(propia);
     when(usuarios.findByEmailIgnoreCase("entidad@test.local")).thenReturn(Optional.of(user));
     when(entidades.findById(20L)).thenReturn(Optional.of(otra));
-    var service=new SolicitudService(solicitudes,usuarios,entidades,analistas,auditoria);
+    var service=new SolicitudService(solicitudes,usuarios,entidades,analistas,deudores,auditoria);
     assertThatThrownBy(()->service.crear(new pe.org.camaracomercioica.protestos.dto.SolicitudRequest(20L,"Motivo","12345678",new java.math.BigDecimal("1500.00")),"entidad@test.local")).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     verify(solicitudes,never()).save(any());
   }
