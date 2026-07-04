@@ -1,0 +1,1 @@
+package pe.org.camaracomercioica.protestos.service; import pe.org.camaracomercioica.protestos.dto.LoginResponse; public record AuthResult(String token,LoginResponse response){}

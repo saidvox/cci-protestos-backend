@@ -1,35 +1,44 @@
 # CCI Protestos Backend
 
-API REST académica para la gestión de protestos, solicitudes, documentos, entidades financieras, analistas, reportes y auditoría.
+API academica en Spring Boot para el flujo de protestos de la Camara de Comercio de Ica.
 
-## Requisitos
+## Ejecutar localmente
+
+Requisitos:
 
 - Java 21
-- PostgreSQL 15 o superior
-- Maven Wrapper incluido
 
-## Configuración
+Configuracion por defecto:
 
-1. Cree la base `cci_protestos`.
-2. Defina `JWT_SECRET` con al menos 32 caracteres aleatorios.
-3. Ajuste `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`, `CORS_ALLOWED_ORIGIN` y `STORAGE_LOCATION` según su entorno.
-4. Use `src/main/resources/application-example.properties` como referencia; no almacene secretos reales en Git.
+```properties
+spring.datasource.url=jdbc:h2:file:./data/cci_protestos
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.hibernate.ddl-auto=create
+```
+
+Comandos:
+
+```bash
+./mvnw spring-boot:run
+./mvnw test
+```
+
+Swagger queda disponible en:
+
+```text
+http://localhost:8080/swagger-ui.html
+```
+
+El esquema se recrea desde las entidades JPA al iniciar. Los datos academicos iniciales se cargan desde `AcademicDataInitializer`.
+
+Si quieres usar PostgreSQL local, ejecuta el backend definiendo estas variables:
 
 ```powershell
-$env:JWT_SECRET='secreto-local-de-desarrollo-con-32-caracteres-minimo'
-$env:DATABASE_URL='jdbc:postgresql://localhost:5432/cci_protestos'
+$env:DATABASE_URL="jdbc:postgresql://localhost:5432/cci_protestos"
+$env:DATABASE_USER="postgres"
+$env:DATABASE_PASSWORD="postgres"
 .\mvnw.cmd spring-boot:run
 ```
 
-Flyway crea el esquema y datos ficticios. Las cuentas demo usan `admin@demo.local`, `analista@demo.local` y `entidad@demo.local`; la contraseña académica es `password`. Cámbiela fuera de un entorno local.
-
-## Verificación y API
-
-```powershell
-.\mvnw.cmd test
-.\mvnw.cmd verify
-```
-
-Swagger UI: `http://localhost:8080/swagger-ui.html`. El login devuelve un JWT que debe enviarse como `Authorization: Bearer <token>`.
-
-Los documentos se validan y almacenan localmente. En esta fase, las hojas Excel solo se validan y registran; no se importan filas de negocio.
+Usuarios demo disponibles: `admin@demo.local`, `staff@demo.local`, `analista@demo.local` y `deudor@demo.local`, todos con la clave `password`.
