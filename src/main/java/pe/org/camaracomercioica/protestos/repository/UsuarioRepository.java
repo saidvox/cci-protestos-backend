@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import pe.org.camaracomercioica.protestos.model.TipoDocumento;
 import pe.org.camaracomercioica.protestos.model.Usuario;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
@@ -12,4 +13,8 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
     boolean existsByDeudorTipoDocumentoAndDeudorNumeroDocumento(TipoDocumento tipoDocumento, String numeroDocumento);
+
+    Optional<Usuario> findByDeudorTipoDocumentoAndDeudorNumeroDocumento(TipoDocumento tipoDocumento, String numeroDocumento);
+
+    List<Usuario> findByDeudorNumeroDocumento(String numeroDocumento);
 }

@@ -2,12 +2,21 @@ package pe.org.camaracomercioica.protestos.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
+import pe.org.camaracomercioica.protestos.dto.DocumentoResponse;
+import pe.org.camaracomercioica.protestos.dto.ExcelImportResponse;
+import pe.org.camaracomercioica.protestos.dto.ExcelValidationResponse;
 import pe.org.camaracomercioica.protestos.dto.UploadResponse;
 import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
 import pe.org.camaracomercioica.protestos.model.CargaExcel;
@@ -17,16 +26,17 @@ import pe.org.camaracomercioica.protestos.repository.CargaExcelRepository;
 import pe.org.camaracomercioica.protestos.repository.DocumentoRepository;
 import pe.org.camaracomercioica.protestos.repository.SolicitudRepository;
 import pe.org.camaracomercioica.protestos.repository.UsuarioRepository;
+import pe.org.camaracomercioica.protestos.util.StoragePaths;
 import pe.org.camaracomercioica.protestos.util.UploadValidator;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.HexFormat;
 import java.util.UUID;
 
@@ -37,6 +47,7 @@ public class UploadService {
     private final CargaExcelRepository cargas;
     private final SolicitudRepository solicitudes;
     private final UsuarioRepository usuarios;
+    private final ExcelImportService excelImportService;
 
     @Value("${app.storage.max-bytes:10485760}")
     private long maxBytes;
@@ -68,8 +79,51 @@ public class UploadService {
         return new UploadResponse(documento.getId(), documento.getNombreOriginal(), "RECIBIDO", "Documento almacenado");
     }
 
+    @Transactional(readOnly = true)
+    public List<DocumentoResponse> listarDocumentos(Long solicitudId, String email, boolean staff) {
+        var solicitud = solicitudes.findById(solicitudId)
+                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
+        if (!staff && !solicitud.getSolicitante().getEmail().equalsIgnoreCase(email)) {
+            throw new AccessDeniedException("No puede ver documentos de esta solicitud");
+        }
+        return documentos.findBySolicitudIdOrderByCreadoEnAsc(solicitudId).stream()
+                .map(doc -> map(doc, solicitudId))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<Resource> descargarDocumento(Long id, String email, boolean staff, boolean inline) throws IOException {
+        var documento = documentos.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Documento no encontrado"));
+        var solicitud = documento.getSolicitud();
+        if (!staff && !solicitud.getSolicitante().getEmail().equalsIgnoreCase(email)) {
+            throw new AccessDeniedException("No puede descargar documentos de esta solicitud");
+        }
+
+        Path root = storageRoot();
+        Path target = root.resolve(documento.getStorageKey()).normalize();
+        if (!target.startsWith(root) || !Files.exists(target)) {
+            throw new ResourceNotFoundException("Archivo no encontrado");
+        }
+
+        Resource resource = new UrlResource(target.toUri());
+        var disposition = (inline ? ContentDisposition.inline() : ContentDisposition.attachment())
+                .filename(documento.getNombreOriginal())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(documento.getMimeType()))
+                .contentLength(documento.getSizeBytes())
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(resource);
+    }
+
     @Transactional
-    public UploadResponse excel(MultipartFile file, String email) throws IOException {
+    public ExcelValidationResponse validateExcel(MultipartFile file) throws IOException {
+        return excelImportService.validate(file, maxBytes);
+    }
+
+    @Transactional
+    public ExcelImportResponse importExcel(MultipartFile file, String email) throws IOException {
         String mime = new UploadValidator(maxBytes).validateExcel(file);
         var usuario = usuarios.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
@@ -86,14 +140,22 @@ public class UploadService {
         carga.setSizeBytes(stored.sizeBytes());
         carga.setChecksumSha256(stored.checksumSha256());
         carga.setEstado(EstadoCarga.RECIBIDA);
-        carga.setResumen("Archivo validado y registrado; importacion pendiente");
+        carga.setResumen("Archivo recibido para validacion e importacion");
         carga = cargas.saveAndFlush(carga);
 
-        return new UploadResponse(carga.getId(), carga.getNombreArchivo(), carga.getEstado().name(), carga.getResumen());
+        var response = excelImportService.importRows(file, carga, maxBytes);
+        cargas.saveAndFlush(carga);
+        return response;
+    }
+
+    @Transactional
+    public UploadResponse excel(MultipartFile file, String email) throws IOException {
+        var imported = importExcel(file, email);
+        return new UploadResponse(imported.cargaId(), imported.filename(), imported.status(), imported.summary());
     }
 
     private StoredFile store(MultipartFile file, String prefix, String mimeType) throws IOException {
-        Path root = Paths.get(storageLocation).toAbsolutePath().normalize();
+        Path root = storageRoot();
         Files.createDirectories(root.resolve(prefix));
 
         String key = prefix + "/" + UUID.randomUUID() + extension(file.getOriginalFilename());
@@ -126,7 +188,7 @@ public class UploadService {
 
     private void deleteStoredFile(String key) {
         try {
-            Path root = Paths.get(storageLocation).toAbsolutePath().normalize();
+            Path root = storageRoot();
             Path target = root.resolve(key).normalize();
             if (target.startsWith(root)) {
                 Files.deleteIfExists(target);
@@ -149,6 +211,22 @@ public class UploadService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private Path storageRoot() {
+        return StoragePaths.resolveRoot(storageLocation);
+    }
+
+    private DocumentoResponse map(Documento documento, Long solicitudId) {
+        return new DocumentoResponse(
+                documento.getId(),
+                solicitudId,
+                documento.getNombreOriginal(),
+                documento.getMimeType(),
+                documento.getSizeBytes(),
+                "/api/documentos/" + documento.getId() + "/download",
+                documento.getCreadoEn()
+        );
     }
 
     private record StoredFile(String key, String mimeType, long sizeBytes, String checksumSha256) {

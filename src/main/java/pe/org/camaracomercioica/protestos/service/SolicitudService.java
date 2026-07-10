@@ -14,29 +14,41 @@ import pe.org.camaracomercioica.protestos.exception.ConflictException;
 import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
 import pe.org.camaracomercioica.protestos.model.Deudor;
 import pe.org.camaracomercioica.protestos.model.EntidadFinanciera;
+import pe.org.camaracomercioica.protestos.model.EstadoProtesto;
 import pe.org.camaracomercioica.protestos.model.EstadoSolicitud;
+import pe.org.camaracomercioica.protestos.model.TipoTramite;
 import pe.org.camaracomercioica.protestos.model.TipoDocumento;
 import pe.org.camaracomercioica.protestos.model.TipoPersona;
 import pe.org.camaracomercioica.protestos.model.Usuario;
 import pe.org.camaracomercioica.protestos.repository.AnalistaRepository;
 import pe.org.camaracomercioica.protestos.repository.DeudorRepository;
 import pe.org.camaracomercioica.protestos.repository.EntidadFinancieraRepository;
+import pe.org.camaracomercioica.protestos.repository.ProtestoRepository;
 import pe.org.camaracomercioica.protestos.repository.SolicitudRepository;
 import pe.org.camaracomercioica.protestos.repository.UsuarioRepository;
 import pe.org.camaracomercioica.protestos.util.SolicitudStatePolicy;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class SolicitudService {
+    private static final List<EstadoSolicitud> ESTADOS_SOLICITUD_ACTIVA = List.of(
+            EstadoSolicitud.REGISTRADA,
+            EstadoSolicitud.EN_REVISION_CCI,
+            EstadoSolicitud.DERIVADA_ENTIDAD,
+            EstadoSolicitud.EN_REVISION_ANALISTA,
+            EstadoSolicitud.APROBADA_ENTIDAD
+    );
 
     private final SolicitudRepository solicitudes;
     private final UsuarioRepository usuarios;
     private final EntidadFinancieraRepository entidades;
     private final AnalistaRepository analistas;
     private final DeudorRepository deudores;
+    private final ProtestoRepository protestos;
     private final AuditoriaService auditoria;
 
     @Transactional
@@ -50,6 +62,8 @@ public class SolicitudService {
         if (esAnalistaBanco(usuario) && !perteneceAEntidad(usuario, entidad)) {
             throw new AccessDeniedException("Solo puede registrar solicitudes para su propia entidad");
         }
+        validarRegularizacionDeudor(usuario, deudor, entidad, r);
+        validarSinSolicitudActiva(deudor, entidad, r);
 
         var s = new pe.org.camaracomercioica.protestos.model.Solicitud();
         s.setCodigo("SOL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
@@ -86,7 +100,15 @@ public class SolicitudService {
             if (usuario.getEntidad() == null) {
                 throw new AccessDeniedException("Analista sin entidad financiera asociada");
             }
-            return solicitudes.findByEntidadId(usuario.getEntidad().getId(), p).map(this::map);
+            var estados = java.util.List.of(
+                EstadoSolicitud.DERIVADA_ENTIDAD,
+                EstadoSolicitud.EN_REVISION_ANALISTA,
+                EstadoSolicitud.OBSERVADA_ENTIDAD,
+                EstadoSolicitud.APROBADA_ENTIDAD,
+                EstadoSolicitud.FINALIZADA,
+                EstadoSolicitud.LEVANTAMIENTO_PROCESADO
+            );
+            return solicitudes.findByEntidadIdAndEstadoIn(usuario.getEntidad().getId(), estados, p).map(this::map);
         }
         return solicitudes.findBySolicitanteEmailIgnoreCase(email, p).map(this::map);
     }
@@ -124,6 +146,44 @@ public class SolicitudService {
         return map(s);
     }
 
+    @Transactional(readOnly = true)
+    public List<SolicitudResponse> historialDeudor(String numeroDocumento) {
+        return solicitudes.findByDeudorNumeroDocumentoOrderByCreadoEnDesc(numeroDocumento).stream()
+                .map(this::map)
+                .toList();
+    }
+
+    @Transactional
+    public SolicitudResponse actualizar(Long id, SolicitudRequest r, String email) {
+        var usuario = usuario(email);
+        var s = solicitudes.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
+        
+        if (!s.getSolicitante().getEmail().equalsIgnoreCase(email)) {
+            throw new org.springframework.security.access.AccessDeniedException("No tiene permisos para editar esta solicitud");
+        }
+        
+        if (s.getEstado() != EstadoSolicitud.OBSERVADA_CCI && s.getEstado() != EstadoSolicitud.OBSERVADA_ENTIDAD) {
+            throw new BadRequestException("Solo se pueden corregir solicitudes en estado observado");
+        }
+        
+        var entidad = entidades.findById(r.entidadId())
+                .orElseThrow(() -> new ResourceNotFoundException("Entidad financiera no encontrada"));
+        
+        s.setEntidad(entidad);
+        s.setTipoTramite(r.tipoTramite());
+        s.setNumeroDocumentoDeudor(r.numeroDocumentoDeudor());
+        s.setMonto(r.monto());
+        s.setMoneda(r.moneda());
+        s.setMotivo(r.motivo());
+        s.setEstado(EstadoSolicitud.REGISTRADA);
+        s.setActualizadoEn(Instant.now());
+        
+        s = solicitudes.save(s);
+        auditoria.registrar(email, "CORREGIR", "SOLICITUD", id, "REGISTRADA");
+        return map(s);
+    }
+
     private Usuario usuario(String email) {
         return usuarios.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
@@ -157,6 +217,21 @@ public class SolicitudService {
                     d.setTipoPersona(tipo == TipoDocumento.RUC ? TipoPersona.JURIDICA : TipoPersona.NATURAL);
                     return deudores.save(d);
                 });
+    }
+
+    private void validarRegularizacionDeudor(Usuario usuario, Deudor deudor, EntidadFinanciera entidad, SolicitudRequest r) {
+        if (!esDeudor(usuario) || r.tipoTramite() != TipoTramite.REGULARIZACION) {
+            return;
+        }
+        if (!protestos.existsByDeudorIdAndEntidadIdAndEstado(deudor.getId(), entidad.getId(), EstadoProtesto.VIGENTE)) {
+            throw new BadRequestException("La entidad financiera no corresponde a un protesto vigente del deudor");
+        }
+    }
+
+    private void validarSinSolicitudActiva(Deudor deudor, EntidadFinanciera entidad, SolicitudRequest r) {
+        if (solicitudes.existsActiveDuplicate(deudor.getId(), entidad.getId(), r.tipoTramite(), ESTADOS_SOLICITUD_ACTIVA)) {
+            throw new ConflictException("Ya existe una solicitud activa para este protesto");
+        }
     }
 
     private TipoDocumento tipoDocumento(String documento) {

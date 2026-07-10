@@ -38,5 +38,16 @@ public class AnalistaController {
     public AnalistaResponse crear(@Valid @RequestBody AnalistaRequest r) {
         return service.crear(r);
     }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Actualizar analista", description = "Actualiza los datos de un analista existente. Exclusivo para administradores.")
+    @ApiResponse(responseCode = "200", description = "Analista actualizado correctamente")
+    @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "No autorizado")
+    @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
+    @ApiResponse(responseCode = "404", description = "Analista no encontrado")
+    public AnalistaResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateAnalistaRequest r) {
+        return service.actualizar(id, r);
+    }
 }
 

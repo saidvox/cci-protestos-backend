@@ -73,4 +73,18 @@ public class SolicitudController {
     ) {
         return service.cambiarEstado(id, r, a.getName());
     }
+
+    @GetMapping("/deudor/{numeroDocumento}")
+    @Operation(summary = "Obtener historial de solicitudes del deudor", description = "Retorna la lista de todas las solicitudes previas del deudor.")
+    @ApiResponse(responseCode = "200", description = "Historial obtenido correctamente")
+    public java.util.List<SolicitudResponse> historialDeudor(@PathVariable String numeroDocumento) {
+        return service.historialDeudor(numeroDocumento);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Actualizar/Corregir solicitud observada", description = "Permite al deudor corregir los datos de una solicitud observada y volver a enviarla.")
+    @ApiResponse(responseCode = "200", description = "Solicitud corregida y reenviada con éxito")
+    public SolicitudResponse actualizar(@PathVariable Long id, @Valid @RequestBody SolicitudRequest r, Authentication a) {
+        return service.actualizar(id, r, a.getName());
+    }
 }

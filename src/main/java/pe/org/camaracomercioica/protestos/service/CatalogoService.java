@@ -4,11 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pe.org.camaracomercioica.protestos.dto.AnalistaRequest;
-import pe.org.camaracomercioica.protestos.dto.AnalistaResponse;
-import pe.org.camaracomercioica.protestos.dto.EntidadRequest;
-import pe.org.camaracomercioica.protestos.dto.EntidadResponse;
+import pe.org.camaracomercioica.protestos.dto.*;
 import pe.org.camaracomercioica.protestos.exception.BadRequestException;
+import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
 import pe.org.camaracomercioica.protestos.model.Analista;
 import pe.org.camaracomercioica.protestos.model.EntidadFinanciera;
 import pe.org.camaracomercioica.protestos.model.Usuario;
@@ -53,6 +51,25 @@ public class CatalogoService {
         return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
     }
 
+    @Transactional
+    public EntidadResponse actualizar(Long id, UpdateEntidadRequest r) {
+        var e = entidades.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Entidad no encontrada"));
+        
+        if (!e.getRuc().equals(r.ruc()) && entidades.existsByRuc(r.ruc())) {
+            throw new BadRequestException("El RUC ya existe");
+        }
+
+        e.setRuc(r.ruc());
+        e.setRazonSocial(r.razonSocial().trim());
+        e.setContacto(r.contacto());
+        e.setEmail(r.email());
+        e.setActivo(r.activo());
+        e = entidades.save(e);
+
+        return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
+    }
+
     @Transactional(readOnly = true)
     public List<AnalistaResponse> analistas() {
         return analistas.findAll().stream().map(this::map).toList();
@@ -71,6 +88,11 @@ public class CatalogoService {
         u.setPasswordHash(encoder.encode(tempPass));
         u.setRol(roles.findByNombre("BANK_ANALYST")
                 .orElseThrow(() -> new BadRequestException("Rol BANK_ANALYST no configurado")));
+        
+        var entidad = entidades.findById(r.entidadId())
+                .orElseThrow(() -> new BadRequestException("Entidad financiera no encontrada"));
+        u.setEntidad(entidad);
+
         u = usuarios.save(u);
 
         var a = new Analista();
@@ -78,10 +100,48 @@ public class CatalogoService {
         a.setCodigo(r.codigo());
         a = analistas.save(a);
 
-        return new AnalistaResponse(a.getId(), a.getCodigo(), a.getUsuario().getNombreCompleto(), a.getUsuario().getEmail(), a.isDisponible(), tempPass);
+        return new AnalistaResponse(a.getId(), a.getCodigo(), a.getUsuario().getNombreCompleto(), a.getUsuario().getEmail(), a.isDisponible(), tempPass, entidad.getId(), entidad.getRazonSocial());
+    }
+
+    @Transactional
+    public AnalistaResponse actualizar(Long id, UpdateAnalistaRequest r) {
+        var a = analistas.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
+        var u = a.getUsuario();
+
+        if (!a.getCodigo().equals(r.codigo()) && analistas.existsByCodigo(r.codigo())) {
+            throw new BadRequestException("El código ya está en uso");
+        }
+        if (!u.getEmail().equalsIgnoreCase(r.email()) && usuarios.findByEmailIgnoreCase(r.email()).isPresent()) {
+            throw new BadRequestException("El email ya está en uso");
+        }
+
+        var entidad = entidades.findById(r.entidadId())
+                .orElseThrow(() -> new BadRequestException("Entidad financiera no encontrada"));
+
+        u.setNombreCompleto(r.nombre());
+        u.setEmail(r.email());
+        u.setEntidad(entidad);
+        usuarios.save(u);
+
+        a.setCodigo(r.codigo());
+        a.setDisponible(r.disponible());
+        a = analistas.save(a);
+
+        return new AnalistaResponse(a.getId(), a.getCodigo(), u.getNombreCompleto(), u.getEmail(), a.isDisponible(), null, entidad.getId(), entidad.getRazonSocial());
     }
 
     private AnalistaResponse map(Analista a) {
-        return new AnalistaResponse(a.getId(), a.getCodigo(), a.getUsuario().getNombreCompleto(), a.getUsuario().getEmail(), a.isDisponible(), null);
+        var u = a.getUsuario();
+        return new AnalistaResponse(
+                a.getId(),
+                a.getCodigo(),
+                u.getNombreCompleto(),
+                u.getEmail(),
+                a.isDisponible(),
+                null,
+                u.getEntidad() != null ? u.getEntidad().getId() : null,
+                u.getEntidad() != null ? u.getEntidad().getRazonSocial() : null
+        );
     }
 }

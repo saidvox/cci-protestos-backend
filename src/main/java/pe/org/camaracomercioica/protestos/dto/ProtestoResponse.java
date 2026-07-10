@@ -13,6 +13,9 @@ public record ProtestoResponse(
     
     @Schema(description = "Nombre completo o razón social del deudor", example = "Persona Ficticia")
     String nombreDeudor,
+
+    @Schema(description = "ID de la entidad financiera asociada", example = "1")
+    Long entidadId,
     
     @Schema(description = "Razón social de la entidad financiera asociada", example = "Financiera Demo Ica")
     String entidad,

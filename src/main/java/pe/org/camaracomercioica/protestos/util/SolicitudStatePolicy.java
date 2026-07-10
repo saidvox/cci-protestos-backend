@@ -8,7 +8,7 @@ public final class SolicitudStatePolicy {
     private SolicitudStatePolicy() {}
 
     private static final Map<EstadoSolicitud, Set<EstadoSolicitud>> ALLOWED = Map.of(
-        EstadoSolicitud.REGISTRADA, Set.of(EstadoSolicitud.EN_REVISION_CCI, EstadoSolicitud.RECHAZADA),
+        EstadoSolicitud.REGISTRADA, Set.of(EstadoSolicitud.EN_REVISION_CCI, EstadoSolicitud.OBSERVADA_CCI, EstadoSolicitud.DERIVADA_ENTIDAD, EstadoSolicitud.RECHAZADA),
         EstadoSolicitud.EN_REVISION_CCI, Set.of(EstadoSolicitud.OBSERVADA_CCI, EstadoSolicitud.DERIVADA_ENTIDAD, EstadoSolicitud.RECHAZADA),
         EstadoSolicitud.OBSERVADA_CCI, Set.of(EstadoSolicitud.EN_REVISION_CCI, EstadoSolicitud.RECHAZADA),
         EstadoSolicitud.DERIVADA_ENTIDAD, Set.of(EstadoSolicitud.EN_REVISION_ANALISTA, EstadoSolicitud.RECHAZADA),

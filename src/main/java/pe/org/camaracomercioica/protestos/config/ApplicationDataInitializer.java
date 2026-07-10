@@ -20,9 +20,9 @@ import pe.org.camaracomercioica.protestos.repository.UsuarioRepository;
 
 @Component
 @RequiredArgsConstructor
-public class AcademicDataInitializer implements CommandLineRunner {
+public class ApplicationDataInitializer implements CommandLineRunner {
 
-    private static final String DEMO_PASSWORD = "password";
+    private static final String DEFAULT_PASSWORD = "password";
 
     private final RolRepository roles;
     private final UsuarioRepository usuarios;
@@ -39,6 +39,8 @@ public class AcademicDataInitializer implements CommandLineRunner {
         var bankAnalyst = role("BANK_ANALYST");
         var debtor = role("USER_DEBTOR");
         var entidad = entidadDemo();
+        entidad("20100047218", "Banco Nacional Demo", "Mesa Protestos", "protestos@banconacional.demo");
+        entidad("20462509236", "Financiera Ica Demo", "Operaciones", "operaciones@financieraica.demo");
         var deudor = deudorDemo();
 
         user("admin@demo.local", "Administrador CCI", admin, null, null);
@@ -57,17 +59,18 @@ public class AcademicDataInitializer implements CommandLineRunner {
     }
 
     private EntidadFinanciera entidadDemo() {
-        return entidades.findAll().stream()
-                .filter(e -> "20111111111".equals(e.getRuc()))
-                .findFirst()
-                .orElseGet(() -> {
-                    var e = new EntidadFinanciera();
-                    e.setRuc("20111111111");
-                    e.setRazonSocial("Banco Demo Ica");
-                    e.setContacto("Mesa de Operaciones");
-                    e.setEmail("operaciones@bancodemo.local");
-                    return entidades.save(e);
-                });
+        return entidad("20111111111", "Banco Demo Ica", "Mesa de Operaciones", "operaciones@bancodemo.local");
+    }
+
+    private EntidadFinanciera entidad(String ruc, String razonSocial, String contacto, String email) {
+        return entidades.findByRuc(ruc).orElseGet(() -> {
+            var e = new EntidadFinanciera();
+            e.setRuc(ruc);
+            e.setRazonSocial(razonSocial);
+            e.setContacto(contacto);
+            e.setEmail(email);
+            return entidades.save(e);
+        });
     }
 
     private Deudor deudorDemo() {
@@ -87,7 +90,7 @@ public class AcademicDataInitializer implements CommandLineRunner {
         var u = usuarios.findByEmailIgnoreCase(email).orElseGet(Usuario::new);
         u.setNombreCompleto(nombre);
         u.setEmail(email);
-        u.setPasswordHash(passwordEncoder.encode(DEMO_PASSWORD));
+        u.setPasswordHash(passwordEncoder.encode(DEFAULT_PASSWORD));
         u.setRol(rol);
         u.setEntidad(entidad);
         u.setDeudor(deudor);
@@ -107,4 +110,5 @@ public class AcademicDataInitializer implements CommandLineRunner {
         a.setCodigo("AN-DEMO-001");
         analistas.save(a);
     }
+
 }

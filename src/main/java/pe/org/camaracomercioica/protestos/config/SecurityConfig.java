@@ -102,6 +102,7 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/api/auth/csrf",
                                 "/api/v1/auth/register",
+                                "/api/v1/auth/debtor-lookup",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html"
@@ -114,6 +115,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/solicitudes/mis-solicitudes").hasAnyRole("USER_DEBTOR", "BANK_ANALYST")
                         .requestMatchers(HttpMethod.GET, "/api/solicitudes/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/solicitudes").hasAnyRole("CCI_ADMIN", "CCI_STAFF", "BANK_ANALYST")
+                        .requestMatchers(HttpMethod.GET, "/api/documentos/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/documentos-tramite/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/documentos-tramite").hasAnyRole("CCI_ADMIN", "CCI_STAFF")
+                        .requestMatchers(HttpMethod.DELETE, "/api/documentos-tramite/*").hasAnyRole("CCI_ADMIN", "CCI_STAFF")
                         .requestMatchers("/api/dashboard/**").authenticated()
                         .requestMatchers("/api/reportes/**", "/api/excel/**").hasAnyRole("CCI_ADMIN", "CCI_STAFF", "BANK_ANALYST")
                         .requestMatchers("/api/entidades/**", "/api/analistas/**", "/api/auditoria/**").hasRole("CCI_ADMIN")
