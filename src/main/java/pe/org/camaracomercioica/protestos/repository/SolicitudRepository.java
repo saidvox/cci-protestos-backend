@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import pe.org.camaracomercioica.protestos.model.EstadoSolicitud;
 import pe.org.camaracomercioica.protestos.model.Solicitud;
+import pe.org.camaracomercioica.protestos.model.TipoTramite;
 
 import java.time.Instant;
 import java.util.List;
@@ -73,9 +74,49 @@ public interface SolicitudRepository extends JpaRepository<Solicitud, Long> {
     )
     Page<Solicitud> findByEntidadId(@Param("entidadId") Long entidadId, Pageable pageable);
 
+    @Query(
+            value = """
+            select s from Solicitud s
+            join fetch s.solicitante solicitante
+            join fetch s.deudor deudor
+            join fetch s.entidad entidad
+            left join fetch s.analista analista
+            left join fetch analista.usuario analistaUsuario
+            where entidad.id = :entidadId
+              and s.estado in :estados
+            """,
+            countQuery = """
+            select count(s) from Solicitud s
+            join s.entidad entidad
+            where entidad.id = :entidadId
+              and s.estado in :estados
+            """
+    )
+    Page<Solicitud> findByEntidadIdAndEstadoIn(
+            @Param("entidadId") Long entidadId,
+            @Param("estados") List<EstadoSolicitud> estados,
+            Pageable pageable
+    );
+
     long countByEstado(EstadoSolicitud estado);
 
     long countByEstadoAndEntidadId(EstadoSolicitud estado, Long entidadId);
 
+    @Query("""
+            select count(s) > 0 from Solicitud s
+            where s.deudor.id = :deudorId
+              and s.entidad.id = :entidadId
+              and s.tipoTramite = :tipoTramite
+              and s.estado in :estados
+            """)
+    boolean existsActiveDuplicate(
+            @Param("deudorId") Long deudorId,
+            @Param("entidadId") Long entidadId,
+            @Param("tipoTramite") TipoTramite tipoTramite,
+            @Param("estados") List<EstadoSolicitud> estados
+    );
+
     List<Solicitud> findByCreadoEnBetween(Instant desde, Instant hasta);
+
+    List<Solicitud> findByDeudorNumeroDocumentoOrderByCreadoEnDesc(String numeroDocumento);
 }

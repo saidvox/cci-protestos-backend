@@ -1,9 +1,10 @@
 package pe.org.camaracomercioica.protestos.dto;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 
-@Schema(description = "Datos para registrar un nuevo analista")
-public record AnalistaRequest(
+@Schema(description = "Datos para actualizar un analista existente")
+public record UpdateAnalistaRequest(
     @NotBlank
     @Size(max=150)
     @Schema(description = "Nombre completo del analista", example = "Carlos Ramos", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -21,5 +22,8 @@ public record AnalistaRequest(
 
     @NotNull
     @Schema(description = "ID de la entidad financiera asociada", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
-    Long entidadId
+    Long entidadId,
+
+    @Schema(description = "Indica si el analista está disponible", example = "true")
+    boolean disponible
 ) {}

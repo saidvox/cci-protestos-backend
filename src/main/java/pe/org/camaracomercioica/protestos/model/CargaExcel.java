@@ -30,7 +30,7 @@ public class CargaExcel {
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "entidad_id")
     private EntidadFinanciera entidad;
 

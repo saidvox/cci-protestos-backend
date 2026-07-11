@@ -4,12 +4,18 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import pe.org.camaracomercioica.protestos.dto.PageResponse;
 import pe.org.camaracomercioica.protestos.dto.ProtestoResponse;
+import pe.org.camaracomercioica.protestos.model.EstadoProtesto;
+import pe.org.camaracomercioica.protestos.model.Protesto;
 import pe.org.camaracomercioica.protestos.repository.ProtestoRepository;
 import java.time.LocalDate;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/protestos")
@@ -21,32 +27,38 @@ public class ProtestoController {
 
     @GetMapping("/consulta")
     @Operation(summary = "Consultar protestos", description = "Busca protestos y moras registrados en base a filtros como documento del deudor, nombre, entidad financiera de origen y rango de fechas.")
-    @ApiResponse(responseCode = "200", description = "Consulta exitosa, retorna la lista de coincidencias")
+    @ApiResponse(responseCode = "200", description = "Consulta exitosa, retorna una pagina de coincidencias")
     @ApiResponse(responseCode = "401", description = "No autorizado")
-    public List<ProtestoResponse> consultar(
+    public PageResponse<ProtestoResponse> consultar(
             @RequestParam(required = false) String documento,
             @RequestParam(required = false) String nombre,
             @RequestParam(required = false) Long entidad,
+            @RequestParam(required = false) EstadoProtesto estado,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @ParameterObject @PageableDefault(size = 10, sort = "fechaProtesto", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return repository.consultar(blank(documento), blank(nombre), entidad, desde, hasta).stream()
-                .map(p -> new ProtestoResponse(
-                        p.getId(),
-                        p.getNumeroDocumento(),
-                        p.getNombreDeudor(),
-                        p.getEntidad().getRazonSocial(),
-                        p.getTipoTitulo(),
-                        p.getMonto(),
-                        p.getMoneda(),
-                        p.getFechaProtesto(),
-                        p.isVigente()
-                ))
-                .toList();
+        return PageResponse.from(repository
+                .consultar(blankLower(documento), blankLower(nombre), entidad, estado, desde, hasta, pageable)
+                .map(this::map));
     }
 
-    private String blank(String s) {
-        return s == null || s.isBlank() ? null : s.trim();
+    private String blankLower(String s) {
+        return s == null || s.isBlank() ? null : s.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private ProtestoResponse map(Protesto p) {
+        return new ProtestoResponse(
+                p.getId(),
+                p.getNumeroDocumento(),
+                p.getNombreDeudor(),
+                p.getEntidad().getId(),
+                p.getEntidad().getRazonSocial(),
+                p.getTipoTitulo(),
+                p.getMonto(),
+                p.getMoneda(),
+                p.getFechaProtesto(),
+                p.isVigente()
+        );
     }
 }
-

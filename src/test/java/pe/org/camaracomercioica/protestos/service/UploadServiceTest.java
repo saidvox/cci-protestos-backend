@@ -25,10 +25,11 @@ class UploadServiceTest {
     @Mock CargaExcelRepository cargas;
     @Mock SolicitudRepository solicitudes;
     @Mock UsuarioRepository usuarios;
+    @Mock ExcelImportService excelImportService;
 
     @Test
     void rechazaDocumentoSiUsuarioNoEsPropietario() throws Exception {
-        var service = new UploadService(documentos, cargas, solicitudes, usuarios);
+        var service = new UploadService(documentos, cargas, solicitudes, usuarios, excelImportService);
         ReflectionTestUtils.setField(service, "maxBytes", 1024L);
         ReflectionTestUtils.setField(service, "storageLocation", "./target/test-storage");
 

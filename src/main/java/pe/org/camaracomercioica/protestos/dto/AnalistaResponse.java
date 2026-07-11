@@ -19,5 +19,11 @@ public record AnalistaResponse(
     boolean disponible,
     
     @Schema(description = "Contraseña autogenerada (sólo visible tras la creación inicial)", example = "aBcd1234")
-    String password
+    String password,
+
+    @Schema(description = "ID de la entidad financiera asociada", example = "1")
+    Long entidadId,
+
+    @Schema(description = "Nombre de la entidad financiera asociada", example = "Financiera Demo Ica")
+    String entidadNombre
 ) {}

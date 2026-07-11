@@ -1,15 +1,27 @@
 package pe.org.camaracomercioica.protestos.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.*;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pe.org.camaracomercioica.protestos.dto.*;
-import pe.org.camaracomercioica.protestos.exception.*;
-import pe.org.camaracomercioica.protestos.model.*;
-import pe.org.camaracomercioica.protestos.repository.*;
+import pe.org.camaracomercioica.protestos.dto.LoginRequest;
+import pe.org.camaracomercioica.protestos.dto.LoginResponse;
+import pe.org.camaracomercioica.protestos.dto.RegisterRequest;
+import pe.org.camaracomercioica.protestos.exception.BadRequestException;
+import pe.org.camaracomercioica.protestos.exception.ConflictException;
+import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
+import pe.org.camaracomercioica.protestos.exception.UnauthorizedException;
+import pe.org.camaracomercioica.protestos.model.Deudor;
+import pe.org.camaracomercioica.protestos.model.Rol;
+import pe.org.camaracomercioica.protestos.model.TipoDocumento;
+import pe.org.camaracomercioica.protestos.model.TipoPersona;
+import pe.org.camaracomercioica.protestos.model.Usuario;
+import pe.org.camaracomercioica.protestos.repository.DeudorRepository;
+import pe.org.camaracomercioica.protestos.repository.RolRepository;
+import pe.org.camaracomercioica.protestos.repository.UsuarioRepository;
 import pe.org.camaracomercioica.protestos.security.JwtService;
 
 import java.time.Instant;
@@ -21,72 +33,145 @@ public class AuthService {
 
     private final AuthenticationManager authenticationManager;
     private final UsuarioRepository users;
+    private final DeudorRepository deudores;
     private final RolRepository roles;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwt;
 
     @Transactional(readOnly = true)
-    public AuthResult login(LoginRequest r) {
+    public AuthResult login(LoginRequest request) {
         try {
-            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(r.email(), r.password()));
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.email(), request.password()));
         } catch (AuthenticationException e) {
-            throw new UnauthorizedException("Credenciales inválidas");
+            throw new UnauthorizedException("Credenciales invalidas");
         }
-        return jwt.issue(users.findByEmailIgnoreCase(r.email())
-                .orElseThrow(() -> new UnauthorizedException("Credenciales inválidas")));
+        return jwt.issue(resolveLoginUser(request.email()));
     }
 
     @Transactional
-    public void register(RegisterRequest r) {
-        // 1. Validar unicidad del email
-        if (users.existsByEmailIgnoreCase(r.email())) {
-            throw new ConflictException("El correo electrónico ya está registrado.");
+    public void register(RegisterRequest request) {
+        String email = request.email().trim();
+        if (users.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("El correo electronico ya esta registrado.");
         }
 
-        // 2. Validar formato y longitud del número de documento
-        String tipo = r.tipoDocumento().toUpperCase();
-        String numero = r.numeroDocumento().trim();
+        TipoDocumento tipoDocumento = parseTipoDocumento(request.tipoDocumento());
+        String numeroDocumento = normalizeNumeroDocumento(tipoDocumento, request.numeroDocumento());
+        validateNumeroDocumento(tipoDocumento, numeroDocumento);
 
-        if ("DNI".equals(tipo) && numero.length() != 8) {
-            throw new BadRequestException("El DNI debe tener exactamente 8 caracteres.");
-        } else if ("RUC".equals(tipo) && numero.length() != 11) {
-            throw new BadRequestException("El RUC debe tener exactamente 11 caracteres.");
+        if (users.existsByDeudorTipoDocumentoAndDeudorNumeroDocumento(tipoDocumento, numeroDocumento)) {
+            throw new ConflictException("El documento de identidad ya esta asociado a otra cuenta.");
         }
 
-        // 3. Validar unicidad del documento
-        if (users.existsByDeudorTipoDocumentoAndDeudorNumeroDocumento(TipoDocumento.valueOf(tipo), numero)) {
-            throw new ConflictException("El documento de identidad ya está registrado por otro deudor.");
-        }
-
-        // 4. Buscar rol USER_DEBTOR
         Rol role = roles.findByNombre("USER_DEBTOR")
                 .orElseThrow(() -> new ResourceNotFoundException("Rol de deudor no configurado en el sistema."));
 
-        // 5. Crear y persistir usuario
-        Usuario u = new Usuario();
-        u.setNombreCompleto(r.nombreCompleto());
-        u.setEmail(r.email());
-        u.setPasswordHash(passwordEncoder.encode(r.password()));
-        u.setRol(role);
-        u.setTipoDocumento(tipo);
-        u.setNumeroDocumento(numero);
-        u.setActivo(true);
+        Deudor deudor = deudores.findByTipoDocumentoAndNumeroDocumento(tipoDocumento, numeroDocumento)
+                .orElseGet(() -> nuevoDeudor(tipoDocumento, numeroDocumento, request.nombreCompleto().trim(), email));
+        if (deudor.getEmail() == null || deudor.getEmail().isBlank()) {
+            deudor.setEmail(email);
+        }
+        deudor.setActualizadoEn(Instant.now());
+        deudor = deudores.save(deudor);
 
-        users.save(u);
+        Usuario user = new Usuario();
+        user.setNombreCompleto(request.nombreCompleto().trim());
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRol(role);
+        user.setDeudor(deudor);
+        user.setActivo(true);
+
+        users.save(user);
     }
 
     @Transactional(readOnly = true)
     public LoginResponse getSession(String email) {
-        Usuario u = users.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado o sesión inválida."));
-        
-        String roleName = u.getRol().getNombre();
-        // Asignamos una expiración simulada razonable para la sesión en el frontend (ej. +60 minutos)
+        Usuario user = users.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado o sesion invalida."));
+
+        String roleName = user.getRol().getNombre();
         Instant expiresAt = Instant.now().plusSeconds(3600);
-        
+
         return new LoginResponse(
                 expiresAt,
-                new LoginResponse.UserView(u.getId(), u.getNombreCompleto(), u.getEmail(), List.of(roleName), u.getTipoDocumento(), u.getNumeroDocumento())
+                new LoginResponse.UserView(
+                        user.getId(),
+                        user.getNombreCompleto(),
+                        user.getEmail(),
+                        List.of(roleName),
+                        user.getTipoDocumento(),
+                        user.getNumeroDocumento()
+                )
         );
+    }
+
+    @Transactional(readOnly = true)
+    public DeudorLookup lookupDebtor(String tipoDocumento, String numeroDocumento) {
+        TipoDocumento tipo = parseTipoDocumento(tipoDocumento);
+        String numero = normalizeNumeroDocumento(tipo, numeroDocumento);
+        validateNumeroDocumento(tipo, numero);
+
+        return deudores.findByTipoDocumentoAndNumeroDocumento(tipo, numero)
+                .map(deudor -> new DeudorLookup(true, deudor.getNombreRazonSocial(), deudor.getEmail()))
+                .orElseGet(() -> new DeudorLookup(false, null, null));
+    }
+
+    private Usuario resolveLoginUser(String identifier) {
+        String value = identifier.trim();
+        if (value.contains("@")) {
+            return users.findByEmailIgnoreCase(value)
+                    .orElseThrow(() -> new UnauthorizedException("Credenciales invalidas"));
+        }
+        String document = value.replaceAll("\\s+", "").toUpperCase();
+        if (document.matches("\\d+")) {
+            document = document.replaceAll("\\D", "");
+        }
+        var matches = users.findByDeudorNumeroDocumento(document);
+        if (matches.size() != 1) {
+            throw new UnauthorizedException("Credenciales invalidas");
+        }
+        return matches.get(0);
+    }
+
+    private TipoDocumento parseTipoDocumento(String value) {
+        try {
+            return TipoDocumento.valueOf(value.trim().toUpperCase());
+        } catch (RuntimeException ex) {
+            throw new BadRequestException("Tipo de documento no permitido.");
+        }
+    }
+
+    private String normalizeNumeroDocumento(TipoDocumento tipo, String value) {
+        String normalized = value.trim();
+        if (tipo == TipoDocumento.DNI || tipo == TipoDocumento.RUC) {
+            return normalized.replaceAll("\\D", "");
+        }
+        return normalized.replaceAll("\\s+", "").toUpperCase();
+    }
+
+    private void validateNumeroDocumento(TipoDocumento tipo, String numero) {
+        if (tipo == TipoDocumento.DNI && !numero.matches("\\d{8}")) {
+            throw new BadRequestException("El DNI debe tener exactamente 8 digitos.");
+        }
+        if (tipo == TipoDocumento.RUC && !numero.matches("\\d{11}")) {
+            throw new BadRequestException("El RUC debe tener exactamente 11 digitos.");
+        }
+        if (tipo == TipoDocumento.CE && !numero.matches("[A-Z0-9]{8,12}")) {
+            throw new BadRequestException("El CE debe tener entre 8 y 12 caracteres alfanumericos.");
+        }
+    }
+
+    private Deudor nuevoDeudor(TipoDocumento tipoDocumento, String numeroDocumento, String nombre, String email) {
+        var deudor = new Deudor();
+        deudor.setTipoDocumento(tipoDocumento);
+        deudor.setNumeroDocumento(numeroDocumento);
+        deudor.setNombreRazonSocial(nombre);
+        deudor.setTipoPersona(tipoDocumento == TipoDocumento.RUC ? TipoPersona.JURIDICA : TipoPersona.NATURAL);
+        deudor.setEmail(email);
+        return deudor;
+    }
+
+    public record DeudorLookup(boolean found, String nombreCompleto, String email) {
     }
 }

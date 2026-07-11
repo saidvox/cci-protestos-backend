@@ -37,5 +37,16 @@ public class EntidadController {
     public EntidadResponse crear(@Valid @RequestBody EntidadRequest r) {
         return service.crear(r);
     }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Actualizar entidad financiera", description = "Actualiza los datos de una entidad financiera. Exclusivo para administradores.")
+    @ApiResponse(responseCode = "200", description = "Entidad actualizada correctamente")
+    @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "No autorizado")
+    @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
+    @ApiResponse(responseCode = "404", description = "Entidad no encontrada")
+    public EntidadResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateEntidadRequest r) {
+        return service.actualizar(id, r);
+    }
 }
 

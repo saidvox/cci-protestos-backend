@@ -31,6 +31,18 @@ public class AuthV1Controller {
         authService.register(r);
     }
 
+    @GetMapping("/debtor-lookup")
+    @Operation(summary = "Buscar deudor por documento", description = "Busca un deudor existente por tipo y numero de documento para autocompletar el registro publico.")
+    @ApiResponse(responseCode = "200", description = "Busqueda procesada")
+    @SecurityRequirements
+    public DebtorLookupResponse lookupDebtor(
+            @RequestParam String tipoDocumento,
+            @RequestParam String numeroDocumento
+    ) {
+        var result = authService.lookupDebtor(tipoDocumento, numeroDocumento);
+        return new DebtorLookupResponse(result.found(), result.nombreCompleto(), result.email());
+    }
+
     @GetMapping("/session")
     @Operation(summary = "Obtener sesión actual", description = "Retorna la información del usuario autenticado actualmente.")
     @ApiResponse(responseCode = "200", description = "Sesión activa, retorna detalles del usuario")
