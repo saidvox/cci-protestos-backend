@@ -12,6 +12,7 @@ public record DocumentoTramiteResponse(
         String filename,
         String downloadUrl,
         long sizeBytes,
+        String tipo,
         boolean activo,
         int orden,
         Instant creadoEn

@@ -41,16 +41,18 @@ public class DocumentoTramiteController {
             @RequestParam String titulo,
             @RequestParam(required = false) String descripcion,
             @RequestParam(required = false) Integer orden,
+            @RequestParam(required = false, defaultValue = "FORMATO_REQUERIDO") String tipo,
             @RequestPart MultipartFile file
     ) throws IOException {
-        return service.crear(titulo, descripcion, orden, file);
+        return service.crear(titulo, descripcion, orden, tipo, file);
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Desactivar documento oficial", description = "Oculta un documento oficial del portal del deudor sin borrar el historial.")
-    @ApiResponse(responseCode = "200", description = "Documento desactivado")
-    public DocumentoTramiteResponse desactivar(@PathVariable Long id) {
-        return service.desactivar(id);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Eliminar documento oficial", description = "Elimina definitivamente el registro y su archivo almacenado.")
+    @ApiResponse(responseCode = "204", description = "Documento eliminado")
+    public void eliminar(@PathVariable Long id) {
+        service.eliminar(id);
     }
 
     @GetMapping("/{id}/download")

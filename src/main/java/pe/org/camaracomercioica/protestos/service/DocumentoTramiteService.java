@@ -10,6 +10,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import pe.org.camaracomercioica.protestos.dto.DocumentoTramiteResponse;
+import pe.org.camaracomercioica.protestos.exception.BadRequestException;
 import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
 import pe.org.camaracomercioica.protestos.model.DocumentoTramite;
 import pe.org.camaracomercioica.protestos.repository.DocumentoTramiteRepository;
@@ -31,6 +32,10 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class DocumentoTramiteService {
+    private static final String TIPO_FORMATO_REQUERIDO = "FORMATO_REQUERIDO";
+    private static final String TIPO_GUIA = "GUIA";
+    private static final String TIPO_PLANTILLA_EXCEL = "PLANTILLA_EXCEL";
+
     private final DocumentoTramiteRepository repository;
 
     @Value("${app.storage.max-bytes:10485760}")
@@ -48,19 +53,24 @@ public class DocumentoTramiteService {
     }
 
     @Transactional
-    public DocumentoTramiteResponse crear(String titulo, String descripcion, Integer orden, MultipartFile file) throws IOException {
-        String mime = new UploadValidator(maxBytes).validateDocument(file);
-        if (!"application/pdf".equals(mime)) {
-            throw new pe.org.camaracomercioica.protestos.exception.BadRequestException("Solo se permiten documentos PDF");
+    public DocumentoTramiteResponse crear(String titulo, String descripcion, Integer orden, String tipo, MultipartFile file) throws IOException {
+        String documentType = normalizeType(tipo);
+        var validator = new UploadValidator(maxBytes);
+        String mime = TIPO_PLANTILLA_EXCEL.equals(documentType)
+                ? validator.validateExcel(file)
+                : validator.validateDocument(file);
+        if (!TIPO_PLANTILLA_EXCEL.equals(documentType) && !"application/pdf".equals(mime)) {
+            throw new BadRequestException("Solo se permiten documentos PDF");
         }
 
-        StoredFile stored = store(file, "documentos-tramite", mime);
+        StoredFile stored = store(file, storagePrefix(documentType), mime);
         cleanupOnRollback(stored.key());
 
         var documento = new DocumentoTramite();
         documento.setTitulo(titulo.trim());
         documento.setDescripcion(descripcion == null || descripcion.isBlank() ? null : descripcion.trim());
         documento.setOrden(orden == null ? 0 : orden);
+        documento.setTipo(documentType);
         documento.setNombreOriginal(file.getOriginalFilename());
         documento.setStorageKey(stored.key());
         documento.setMimeType(stored.mimeType());
@@ -71,11 +81,13 @@ public class DocumentoTramiteService {
     }
 
     @Transactional
-    public DocumentoTramiteResponse desactivar(Long id) {
+    public void eliminar(Long id) {
         var documento = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Documento de tramite no encontrado"));
-        documento.setActivo(false);
-        return map(documento);
+        String storageKey = documento.getStorageKey();
+        repository.delete(documento);
+        repository.flush();
+        deleteAfterCommit(storageKey);
     }
 
     @Transactional(readOnly = true)
@@ -100,10 +112,26 @@ public class DocumentoTramiteService {
                 d.getNombreOriginal(),
                 "/api/documentos-tramite/" + d.getId() + "/download",
                 d.getSizeBytes(),
+                d.getTipo() == null ? TIPO_FORMATO_REQUERIDO : d.getTipo(),
                 d.isActivo(),
                 d.getOrden(),
                 d.getCreadoEn()
         );
+    }
+
+    private String normalizeType(String tipo) {
+        if (tipo == null || tipo.isBlank()) {
+            return TIPO_FORMATO_REQUERIDO;
+        }
+        String value = tipo.trim().toUpperCase();
+        if (!TIPO_FORMATO_REQUERIDO.equals(value) && !TIPO_GUIA.equals(value) && !TIPO_PLANTILLA_EXCEL.equals(value)) {
+            throw new BadRequestException("Tipo de documento no permitido");
+        }
+        return value;
+    }
+
+    private String storagePrefix(String tipo) {
+        return TIPO_PLANTILLA_EXCEL.equals(tipo) ? "plantillas-excel" : "documentos-tramite";
     }
 
     private StoredFile store(MultipartFile file, String prefix, String mimeType) throws IOException {
@@ -136,6 +164,19 @@ public class DocumentoTramiteService {
                 }
             });
         }
+    }
+
+    private void deleteAfterCommit(String key) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            deleteStoredFile(key);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deleteStoredFile(key);
+            }
+        });
     }
 
     private void deleteStoredFile(String key) {

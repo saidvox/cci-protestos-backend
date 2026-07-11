@@ -38,16 +38,16 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         var staff = role("CCI_STAFF");
         var bankAnalyst = role("BANK_ANALYST");
         var debtor = role("USER_DEBTOR");
-        var entidad = entidadDemo();
-        entidad("20100047218", "Banco Nacional Demo", "Mesa Protestos", "protestos@banconacional.demo");
-        entidad("20462509236", "Financiera Ica Demo", "Operaciones", "operaciones@financieraica.demo");
-        var deudor = deudorDemo();
+        var entidad = entidadPrincipal();
+        entidad("20100047218", "Banco Nacional", "Mesa Protestos", "protestos@banconacional.local");
+        entidad("20462509236", "Financiera Ica", "Operaciones", "operaciones@financieraica.local");
+        var deudor = deudorInicial();
 
         user("admin@demo.local", "Administrador CCI", admin, null, null);
         user("staff@demo.local", "Operador CCI", staff, null, null);
-        var analystUser = user("analista@demo.local", "Analista Banco Demo", bankAnalyst, entidad, null);
-        user("deudor@demo.local", "Deudor Demo", debtor, null, deudor);
-        analistaDemo(analystUser);
+        var analystUser = user("analista@demo.local", "Analista Banco Ica", bankAnalyst, entidad, null);
+        user("deudor@demo.local", "Distribuidora Sol del Sur S.R.L.", debtor, null, deudor);
+        analistaInicial(analystUser);
     }
 
     private Rol role(String nombre) {
@@ -58,8 +58,8 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         });
     }
 
-    private EntidadFinanciera entidadDemo() {
-        return entidad("20111111111", "Banco Demo Ica", "Mesa de Operaciones", "operaciones@bancodemo.local");
+    private EntidadFinanciera entidadPrincipal() {
+        return entidad("20111111111", "Banco Ica", "Mesa de Operaciones", "operaciones@bancoica.local");
     }
 
     private EntidadFinanciera entidad(String ruc, String razonSocial, String contacto, String email) {
@@ -73,13 +73,13 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         });
     }
 
-    private Deudor deudorDemo() {
+    private Deudor deudorInicial() {
         return deudores.findByTipoDocumentoAndNumeroDocumento(TipoDocumento.RUC, "20123456789")
                 .orElseGet(() -> {
                     var d = new Deudor();
                     d.setTipoDocumento(TipoDocumento.RUC);
                     d.setNumeroDocumento("20123456789");
-                    d.setNombreRazonSocial("Deudor Demo SAC");
+                    d.setNombreRazonSocial("Distribuidora Sol del Sur S.R.L.");
                     d.setTipoPersona(TipoPersona.JURIDICA);
                     d.setEmail("deudor@demo.local");
                     return deudores.save(d);
@@ -98,7 +98,7 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         return usuarios.save(u);
     }
 
-    private void analistaDemo(Usuario usuario) {
+    private void analistaInicial(Usuario usuario) {
         boolean exists = analistas.findAll().stream()
                 .anyMatch(a -> a.getUsuario().getId().equals(usuario.getId()));
         if (exists) {
@@ -107,7 +107,7 @@ public class ApplicationDataInitializer implements CommandLineRunner {
 
         var a = new Analista();
         a.setUsuario(usuario);
-        a.setCodigo("AN-DEMO-001");
+        a.setCodigo("AN-CCI-001");
         analistas.save(a);
     }
 

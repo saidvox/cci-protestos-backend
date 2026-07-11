@@ -49,5 +49,15 @@ public class AnalistaController {
     public AnalistaResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateAnalistaRequest r) {
         return service.actualizar(id, r);
     }
-}
 
+    @PatchMapping("/{id}/estado")
+    @Operation(summary = "Cambiar disponibilidad de analista", description = "Habilita o deshabilita un analista bancario sin modificar sus datos generales.")
+    @ApiResponse(responseCode = "200", description = "Disponibilidad actualizada correctamente")
+    @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "No autorizado")
+    @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
+    @ApiResponse(responseCode = "404", description = "Analista no encontrado")
+    public AnalistaResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoAnalistaRequest r) {
+        return service.cambiarEstadoAnalista(id, r);
+    }
+}

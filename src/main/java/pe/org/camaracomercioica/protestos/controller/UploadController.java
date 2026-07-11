@@ -10,6 +10,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import pe.org.camaracomercioica.protestos.dto.DocumentoResponse;
+import pe.org.camaracomercioica.protestos.dto.CargaExcelResponse;
 import pe.org.camaracomercioica.protestos.dto.ExcelImportResponse;
 import pe.org.camaracomercioica.protestos.dto.ExcelValidationResponse;
 import pe.org.camaracomercioica.protestos.dto.UploadResponse;
@@ -73,6 +74,12 @@ public class UploadController {
             Authentication a
     ) throws IOException {
         return service.excel(file, a.getName());
+    }
+
+    @GetMapping("/api/excel/cargas")
+    @Operation(summary = "Listar historial de cargas", description = "Devuelve las cargas Excel reales realizadas por el usuario autenticado.")
+    public List<CargaExcelResponse> listarCargas(Authentication authentication) {
+        return service.listarCargas(authentication.getName());
     }
 
     @PostMapping(value = "/api/excel/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

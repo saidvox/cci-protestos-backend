@@ -38,6 +38,9 @@ public class DocumentoTramite {
     @Column(name = "mime_type", nullable = false, length = 100)
     private String mimeType = "application/pdf";
 
+    @Column(nullable = false, length = 30, columnDefinition = "varchar(30) default 'FORMATO_REQUERIDO'")
+    private String tipo = "FORMATO_REQUERIDO";
+
     @Column(name = "size_bytes", nullable = false)
     private long sizeBytes;
 

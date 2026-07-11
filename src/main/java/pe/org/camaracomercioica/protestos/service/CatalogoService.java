@@ -70,6 +70,17 @@ public class CatalogoService {
         return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
     }
 
+    @Transactional
+    public EntidadResponse cambiarEstadoEntidad(Long id, CambioEstadoEntidadRequest r) {
+        var e = entidades.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Entidad no encontrada"));
+
+        e.setActivo(r.activo());
+        e = entidades.save(e);
+
+        return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
+    }
+
     @Transactional(readOnly = true)
     public List<AnalistaResponse> analistas() {
         return analistas.findAll().stream().map(this::map).toList();
@@ -129,6 +140,17 @@ public class CatalogoService {
         a = analistas.save(a);
 
         return new AnalistaResponse(a.getId(), a.getCodigo(), u.getNombreCompleto(), u.getEmail(), a.isDisponible(), null, entidad.getId(), entidad.getRazonSocial());
+    }
+
+    @Transactional
+    public AnalistaResponse cambiarEstadoAnalista(Long id, CambioEstadoAnalistaRequest r) {
+        var a = analistas.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
+
+        a.setDisponible(r.disponible());
+        a = analistas.save(a);
+
+        return map(a);
     }
 
     private AnalistaResponse map(Analista a) {

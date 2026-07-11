@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import pe.org.camaracomercioica.protestos.dto.DocumentoResponse;
+import pe.org.camaracomercioica.protestos.dto.CargaExcelResponse;
 import pe.org.camaracomercioica.protestos.dto.ExcelImportResponse;
 import pe.org.camaracomercioica.protestos.dto.ExcelValidationResponse;
 import pe.org.camaracomercioica.protestos.dto.UploadResponse;
@@ -152,6 +153,23 @@ public class UploadService {
     public UploadResponse excel(MultipartFile file, String email) throws IOException {
         var imported = importExcel(file, email);
         return new UploadResponse(imported.cargaId(), imported.filename(), imported.status(), imported.summary());
+    }
+
+    @Transactional(readOnly = true)
+    public List<CargaExcelResponse> listarCargas(String email) {
+        return cargas.findByUsuarioEmailIgnoreCaseOrderByCreadoEnDesc(email).stream()
+                .map(carga -> new CargaExcelResponse(
+                        carga.getId(),
+                        carga.getNombreArchivo(),
+                        carga.getCreadoEn(),
+                        carga.getTotalFilas(),
+                        carga.getFilasImportadas(),
+                        carga.getFilasConError(),
+                        carga.getEstado().name(),
+                        carga.getResumen(),
+                        carga.getUsuario().getNombreCompleto()
+                ))
+                .toList();
     }
 
     private StoredFile store(MultipartFile file, String prefix, String mimeType) throws IOException {

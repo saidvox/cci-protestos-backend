@@ -137,7 +137,7 @@ public class SecurityConfig {
     CorsConfigurationSource cors(@Value("${app.cors.allowed-origin}") String origin) {
         var config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(origin));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-XSRF-TOKEN"));
         config.setExposedHeaders(List.of("Location"));
         config.setAllowCredentials(true);

@@ -48,5 +48,15 @@ public class EntidadController {
     public EntidadResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateEntidadRequest r) {
         return service.actualizar(id, r);
     }
-}
 
+    @PatchMapping("/{id}/estado")
+    @Operation(summary = "Cambiar estado de entidad", description = "Habilita o deshabilita una entidad financiera sin modificar sus datos generales.")
+    @ApiResponse(responseCode = "200", description = "Estado actualizado correctamente")
+    @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "No autorizado")
+    @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
+    @ApiResponse(responseCode = "404", description = "Entidad no encontrada")
+    public EntidadResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoEntidadRequest r) {
+        return service.cambiarEstadoEntidad(id, r);
+    }
+}
