@@ -86,8 +86,11 @@ public class UploadController {
     @Operation(summary = "Validar plantilla Excel", description = "Revisa estructura, columnas, catálogos y filas del Excel antes de guardar registros en la base de datos.")
     @ApiResponse(responseCode = "200", description = "Validación completada")
     @ApiResponse(responseCode = "400", description = "Formato inválido o plantilla incompatible")
-    public ExcelValidationResponse validarExcel(@RequestPart MultipartFile file) throws IOException {
-        return service.validateExcel(file);
+    public ExcelValidationResponse validarExcel(
+            @RequestPart MultipartFile file,
+            Authentication a
+    ) throws IOException {
+        return service.validateExcel(file, a.getName());
     }
 
     @PostMapping(value = "/api/excel/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

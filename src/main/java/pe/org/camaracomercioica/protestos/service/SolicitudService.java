@@ -142,6 +142,16 @@ public class SolicitudService {
         }
         s.setActualizadoEn(Instant.now());
         s = solicitudes.saveAndFlush(s);
+
+        if (r.estado() == EstadoSolicitud.APROBADA_ENTIDAD) {
+            var activeProtests = protestos.findByDeudorIdAndEntidadIdAndEstado(s.getDeudor().getId(), s.getEntidad().getId(), EstadoProtesto.VIGENTE);
+            for (var protesto : activeProtests) {
+                protesto.setEstado(EstadoProtesto.REGULARIZADO);
+                protesto.setActualizadoEn(Instant.now());
+            }
+            protestos.saveAll(activeProtests);
+        }
+
         auditoria.registrar(actor, "CAMBIAR_ESTADO", "SOLICITUD", id, r.estado().name());
         return map(s);
     }

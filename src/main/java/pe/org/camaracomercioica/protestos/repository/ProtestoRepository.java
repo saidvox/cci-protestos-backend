@@ -45,4 +45,6 @@ public interface ProtestoRepository extends JpaRepository<Protesto, Long> {
     );
 
     boolean existsByDeudorIdAndEntidadIdAndEstado(Long deudorId, Long entidadId, EstadoProtesto estado);
+
+    java.util.List<Protesto> findByDeudorIdAndEntidadIdAndEstado(Long deudorId, Long entidadId, EstadoProtesto estado);
 }

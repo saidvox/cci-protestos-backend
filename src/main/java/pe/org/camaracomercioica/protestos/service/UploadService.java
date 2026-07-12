@@ -119,8 +119,17 @@ public class UploadService {
     }
 
     @Transactional
-    public ExcelValidationResponse validateExcel(MultipartFile file) throws IOException {
-        return excelImportService.validate(file, maxBytes);
+    public ExcelValidationResponse validateExcel(MultipartFile file, String email) throws IOException {
+        var usuario = usuarios.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+        String allowedRuc = null;
+        if (usuario.getRol().getNombre().equals("BANK_ANALYST")) {
+            if (usuario.getEntidad() == null) {
+                throw new pe.org.camaracomercioica.protestos.exception.BadRequestException("El usuario analista no tiene una entidad financiera asociada");
+            }
+            allowedRuc = usuario.getEntidad().getRuc();
+        }
+        return excelImportService.validate(file, allowedRuc, maxBytes);
     }
 
     @Transactional
@@ -128,6 +137,14 @@ public class UploadService {
         String mime = new UploadValidator(maxBytes).validateExcel(file);
         var usuario = usuarios.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+
+        String allowedRuc = null;
+        if (usuario.getRol().getNombre().equals("BANK_ANALYST")) {
+            if (usuario.getEntidad() == null) {
+                throw new pe.org.camaracomercioica.protestos.exception.BadRequestException("El usuario analista no tiene una entidad financiera asociada");
+            }
+            allowedRuc = usuario.getEntidad().getRuc();
+        }
 
         StoredFile stored = store(file, "excel", mime);
         cleanupOnRollback(stored.key());
@@ -144,7 +161,7 @@ public class UploadService {
         carga.setResumen("Archivo recibido para validacion e importacion");
         carga = cargas.saveAndFlush(carga);
 
-        var response = excelImportService.importRows(file, carga, maxBytes);
+        var response = excelImportService.importRows(file, carga, allowedRuc, maxBytes);
         cargas.saveAndFlush(carga);
         return response;
     }

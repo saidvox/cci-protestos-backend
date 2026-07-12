@@ -56,15 +56,15 @@ public class ExcelImportService {
     private final DeudorRepository deudores;
     private final ProtestoRepository protestos;
 
-    public ExcelValidationResponse validate(MultipartFile file, long maxBytes) throws IOException {
+    public ExcelValidationResponse validate(MultipartFile file, String allowedRuc, long maxBytes) throws IOException {
         new UploadValidator(maxBytes).validateExcel(file);
-        return parse(file).toResponse();
+        return parse(file, allowedRuc).toResponse();
     }
 
     @Transactional
-    public ExcelImportResponse importRows(MultipartFile file, CargaExcel carga, long maxBytes) throws IOException {
+    public ExcelImportResponse importRows(MultipartFile file, CargaExcel carga, String allowedRuc, long maxBytes) throws IOException {
         new UploadValidator(maxBytes).validateExcel(file);
-        var parsed = parse(file);
+        var parsed = parse(file, allowedRuc);
         if (!parsed.errors().isEmpty()) {
             carga.setEstado(EstadoCarga.CON_ERROR);
             carga.setTotalFilas(parsed.totalRows());
@@ -141,7 +141,7 @@ public class ExcelImportService {
         );
     }
 
-    private ParsedWorkbook parse(MultipartFile file) throws IOException {
+    private ParsedWorkbook parse(MultipartFile file, String allowedRuc) throws IOException {
         try (Workbook workbook = openWorkbook(file)) {
             Sheet sheet = workbook.getSheet(SHEET_NAME);
             if (sheet == null) {
@@ -159,7 +159,7 @@ public class ExcelImportService {
                     continue;
                 }
                 int excelRow = i + 1;
-                RowResult result = parseRow(row, excelRow, titles);
+                RowResult result = parseRow(row, excelRow, titles, allowedRuc);
                 errors.addAll(result.errors());
                 if (result.row() != null && result.errors().isEmpty()) {
                     rows.add(result.row());
@@ -202,7 +202,7 @@ public class ExcelImportService {
         }
     }
 
-    private RowResult parseRow(Row row, int excelRow, Set<String> titles) {
+    private RowResult parseRow(Row row, int excelRow, Set<String> titles, String allowedRuc) {
         List<ExcelValidationError> errors = new ArrayList<>();
         String tipoDocumentoText = required(row, 0, excelRow, "Tipo_Documento", errors).toUpperCase(Locale.ROOT);
         String numeroDocumento = onlyDigits(required(row, 1, excelRow, "Numero_Documento", errors));
@@ -230,6 +230,8 @@ public class ExcelImportService {
             errors.add(error(excelRow, "RUC_Entidad_Financiera", rucEntidad, "Debe tener 11 digitos"));
         } else if (entidades.findByRuc(rucEntidad).isEmpty()) {
             errors.add(error(excelRow, "RUC_Entidad_Financiera", rucEntidad, "No existe una entidad financiera registrada con este RUC"));
+        } else if (allowedRuc != null && !rucEntidad.equals(allowedRuc)) {
+            errors.add(error(excelRow, "RUC_Entidad_Financiera", rucEntidad, "No tiene permisos para registrar protestos en nombre de otra entidad financiera"));
         }
         if (!TIPOS_TITULO.contains(tipoTitulo)) {
             errors.add(error(excelRow, "Tipo_Titulo", tipoTitulo, "Use uno de: LETRA, PAGARE, CHEQUE, FACTURA, OTRO"));

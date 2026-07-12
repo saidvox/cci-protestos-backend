@@ -17,6 +17,8 @@ import pe.org.camaracomercioica.protestos.repository.DeudorRepository;
 import pe.org.camaracomercioica.protestos.repository.EntidadFinancieraRepository;
 import pe.org.camaracomercioica.protestos.repository.RolRepository;
 import pe.org.camaracomercioica.protestos.repository.UsuarioRepository;
+import pe.org.camaracomercioica.protestos.repository.SolicitudRepository;
+import pe.org.camaracomercioica.protestos.repository.ProtestoRepository;
 
 @Component
 @RequiredArgsConstructor
@@ -30,6 +32,8 @@ public class ApplicationDataInitializer implements CommandLineRunner {
     private final DeudorRepository deudores;
     private final AnalistaRepository analistas;
     private final PasswordEncoder passwordEncoder;
+    private final SolicitudRepository solicitudes;
+    private final ProtestoRepository protestos;
 
     @Override
     @Transactional
@@ -48,6 +52,23 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         var analystUser = user("analista@demo.local", "Analista Banco Ica", bankAnalyst, entidad, null);
         user("deudor@demo.local", "Distribuidora Sol del Sur S.R.L.", debtor, null, deudor);
         analistaInicial(analystUser);
+
+        // Sincronizar estados de protestos para solicitudes que ya fueron aprobadas previamente
+        var approvedRequests = solicitudes.findAll().stream()
+                .filter(s -> s.getEstado() == pe.org.camaracomercioica.protestos.model.EstadoSolicitud.APROBADA_ENTIDAD 
+                        || s.getEstado() == pe.org.camaracomercioica.protestos.model.EstadoSolicitud.FINALIZADA
+                        || s.getEstado() == pe.org.camaracomercioica.protestos.model.EstadoSolicitud.LEVANTAMIENTO_PROCESADO)
+                .toList();
+        for (var s : approvedRequests) {
+            var activeProtests = protestos.findByDeudorIdAndEntidadIdAndEstado(s.getDeudor().getId(), s.getEntidad().getId(), pe.org.camaracomercioica.protestos.model.EstadoProtesto.VIGENTE);
+            if (!activeProtests.isEmpty()) {
+                for (var protesto : activeProtests) {
+                    protesto.setEstado(pe.org.camaracomercioica.protestos.model.EstadoProtesto.REGULARIZADO);
+                    protesto.setActualizadoEn(java.time.Instant.now());
+                }
+                protestos.saveAll(activeProtests);
+            }
+        }
     }
 
     private Rol role(String nombre) {

@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cci-postgres
+    environment:
+      POSTGRES_DB: cci_protestos
+      POSTGRES_USER: cci_user
+      POSTGRES_PASSWORD: cci_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
