@@ -83,19 +83,23 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         if (!hasEmail && !hasPassword) {
             return;
         }
-        if (!hasEmail || !hasPassword) {
+        if (!hasEmail) {
             throw new IllegalStateException("El correo y la contraseña del administrador inicial deben configurarse juntos");
+        }
+        String normalizedEmail = bootstrapAdminEmail.trim().toLowerCase();
+        if (usuarios.findByEmailIgnoreCase(normalizedEmail).isPresent()) {
+            return;
+        }
+        if (!hasPassword) {
+            throw new IllegalStateException("La contraseña del administrador inicial es obligatoria para crear la cuenta");
         }
         if (bootstrapAdminPassword.length() < 12) {
             throw new IllegalStateException("La contraseña del administrador inicial debe tener al menos 12 caracteres");
         }
-        if (usuarios.findByEmailIgnoreCase(bootstrapAdminEmail).isPresent()) {
-            return;
-        }
 
         var user = new Usuario();
         user.setNombreCompleto(bootstrapAdminName);
-        user.setEmail(bootstrapAdminEmail.trim().toLowerCase());
+        user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(bootstrapAdminPassword));
         user.setRol(adminRole);
         user.setActivo(true);
