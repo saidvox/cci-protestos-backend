@@ -1,6 +1,9 @@
 package pe.org.camaracomercioica.protestos;
 import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotation.Autowired; import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc; import org.springframework.boot.test.context.SpringBootTest; import org.springframework.http.MediaType; import org.springframework.mock.web.MockMultipartFile; import org.springframework.security.crypto.password.PasswordEncoder; import org.springframework.security.test.context.support.WithMockUser; import org.springframework.test.web.servlet.MockMvc; import pe.org.camaracomercioica.protestos.model.*; import pe.org.camaracomercioica.protestos.repository.*; import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf; import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*; import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-@SpringBootTest @AutoConfigureMockMvc class SecurityIntegrationTest {
+@SpringBootTest(properties = {
+ "springdoc.api-docs.enabled=false",
+ "springdoc.swagger-ui.enabled=false"
+}) @AutoConfigureMockMvc class SecurityIntegrationTest {
  @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired PasswordEncoder encoder;
  @BeforeEach void seed(){if(users.findByEmailIgnoreCase("login@test.local").isEmpty()){var role=roles.findByNombre("CCI_ADMIN").orElseGet(()->{var r=new Rol();r.setNombre("CCI_ADMIN");return roles.save(r);});var entidad=new EntidadFinanciera();entidad.setRuc("20999999999");entidad.setRazonSocial("Entidad Test");entidad=entidades.save(entidad);var u=new Usuario();u.setNombreCompleto("Login Test");u.setEmail("login@test.local");u.setPasswordHash(encoder.encode("Password1!"));u.setRol(role);u.setEntidad(entidad);users.save(u);}}
  @Test void error401UsaContratoApiError() throws Exception {mvc.perform(get("/api/solicitudes")).andExpect(status().isUnauthorized()).andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)).andExpect(jsonPath("$.code").value("UNAUTHORIZED")).andExpect(jsonPath("$.path").value("/api/solicitudes"));}
@@ -26,6 +29,12 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
  }
  @Test void logoutEliminaCookieJwt() throws Exception {
   mvc.perform(post("/api/auth/logout").with(csrf())).andExpect(status().isNoContent()).andExpect(cookie().maxAge("CCI_ACCESS_TOKEN",0));
+ }
+ @Test void rutaInexistenteResponde404SinExponerErrorInterno() throws Exception {
+  mvc.perform(get("/v3/api-docs"))
+    .andExpect(status().isNotFound())
+    .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+    .andExpect(jsonPath("$.path").value("/v3/api-docs"));
  }
  private byte[] excelValido() throws Exception {
   String[] headers={"Tipo_Documento","Numero_Documento","Nombre_Razon_Social","Tipo_Persona","Email_Deudor","Telefono_Deudor","RUC_Entidad_Financiera","Numero_Titulo","Tipo_Titulo","Fecha_Protesto","Fecha_Vencimiento","Moneda","Monto","Estado","Observaciones","Codigo_Externo"};
