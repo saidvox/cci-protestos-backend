@@ -40,7 +40,7 @@ public class AuthV1Controller {
             @RequestParam String numeroDocumento
     ) {
         var result = authService.lookupDebtor(tipoDocumento, numeroDocumento);
-        return new DebtorLookupResponse(result.found(), result.nombreCompleto(), result.email());
+        return new DebtorLookupResponse(result.found(), result.nombreCompleto());
     }
 
     @GetMapping("/session")

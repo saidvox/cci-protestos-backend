@@ -30,6 +30,9 @@ public class AuthController {
     @Value("${app.security.cookie.name:CCI_ACCESS_TOKEN}")
     String cookieName;
 
+    @Value("${app.security.cookie.same-site:Strict}")
+    String sameSite;
+
     @PostMapping("/login")
     @Operation(summary = "Iniciar sesión", description = "Autentica al usuario y establece el token JWT en una cookie HttpOnly secure.")
     @ApiResponse(responseCode = "200", description = "Autenticación exitosa, retorna detalles del usuario")
@@ -62,7 +65,7 @@ public class AuthController {
         return ResponseCookie.from(cookieName, value)
                 .httpOnly(true)
                 .secure(secure)
-                .sameSite("Strict")
+                .sameSite(sameSite)
                 .path("/")
                 .maxAge(age.isNegative() ? Duration.ZERO : age)
                 .build();

@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+.agents
+target
+storage
+*.log
+.env
+.env.*
+docker-compose.yml
+README.md

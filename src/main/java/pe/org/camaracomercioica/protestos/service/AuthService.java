@@ -113,8 +113,8 @@ public class AuthService {
         validateNumeroDocumento(tipo, numero);
 
         return deudores.findByTipoDocumentoAndNumeroDocumento(tipo, numero)
-                .map(deudor -> new DeudorLookup(true, deudor.getNombreRazonSocial(), deudor.getEmail()))
-                .orElseGet(() -> new DeudorLookup(false, null, null));
+                .map(deudor -> new DeudorLookup(true, deudor.getNombreRazonSocial()))
+                .orElseGet(() -> new DeudorLookup(false, null));
     }
 
     private Usuario resolveLoginUser(String identifier) {
@@ -172,6 +172,6 @@ public class AuthService {
         return deudor;
     }
 
-    public record DeudorLookup(boolean found, String nombreCompleto, String email) {
+    public record DeudorLookup(boolean found, String nombreCompleto) {
     }
 }

@@ -1,7 +1,9 @@
 package pe.org.camaracomercioica.protestos.dto;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Detalle del analista registrado")
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record AnalistaResponse(
     @Schema(description = "ID único del analista", example = "1")
     Long id,

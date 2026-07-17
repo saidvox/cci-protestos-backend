@@ -103,6 +103,8 @@ public class SecurityConfig {
                                 "/api/auth/csrf",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/debtor-lookup",
+                                "/actuator/health",
+                                "/actuator/health/**",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html"
