@@ -37,6 +37,7 @@ public class DocumentoTramiteService {
     private static final String TIPO_PLANTILLA_EXCEL = "PLANTILLA_EXCEL";
 
     private final DocumentoTramiteRepository repository;
+    private final AuditoriaService auditoria;
 
     @Value("${app.storage.max-bytes:10485760}")
     private long maxBytes;
@@ -53,7 +54,7 @@ public class DocumentoTramiteService {
     }
 
     @Transactional
-    public DocumentoTramiteResponse crear(String titulo, String descripcion, Integer orden, String tipo, MultipartFile file) throws IOException {
+    public DocumentoTramiteResponse crear(String titulo, String descripcion, Integer orden, String tipo, MultipartFile file, String actor) throws IOException {
         String documentType = normalizeType(tipo);
         var validator = new UploadValidator(maxBytes);
         String mime = TIPO_PLANTILLA_EXCEL.equals(documentType)
@@ -77,16 +78,19 @@ public class DocumentoTramiteService {
         documento.setSizeBytes(stored.sizeBytes());
         documento.setChecksumSha256(stored.checksumSha256());
         documento = repository.saveAndFlush(documento);
+        auditoria.registrar(actor, "CREAR", "DOCUMENTO_TRAMITE", documento.getId(), documento.getTitulo());
         return map(documento);
     }
 
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(Long id, String actor) {
         var documento = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Documento de tramite no encontrado"));
         String storageKey = documento.getStorageKey();
+        String titulo = documento.getTitulo();
         repository.delete(documento);
         repository.flush();
+        auditoria.registrar(actor, "ELIMINAR", "DOCUMENTO_TRAMITE", id, titulo);
         deleteAfterCommit(storageKey);
     }
 

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.org.camaracomercioica.protestos.dto.*;
 import pe.org.camaracomercioica.protestos.exception.BadRequestException;
+import pe.org.camaracomercioica.protestos.exception.ConflictException;
 import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
 import pe.org.camaracomercioica.protestos.model.Analista;
 import pe.org.camaracomercioica.protestos.model.EntidadFinanciera;
@@ -15,8 +16,8 @@ import pe.org.camaracomercioica.protestos.repository.EntidadFinancieraRepository
 import pe.org.camaracomercioica.protestos.repository.RolRepository;
 import pe.org.camaracomercioica.protestos.repository.UsuarioRepository;
 
-import java.security.SecureRandom;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -27,58 +28,56 @@ public class CatalogoService {
     private final UsuarioRepository usuarios;
     private final RolRepository roles;
     private final PasswordEncoder encoder;
+    private final AuditoriaService auditoria;
 
     @Transactional(readOnly = true)
     public List<EntidadResponse> entidades() {
-        return entidades.findAll().stream()
-                .map(e -> new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo()))
-                .toList();
+        return entidades.findAll().stream().map(this::map).toList();
     }
 
     @Transactional
-    public EntidadResponse crear(EntidadRequest r) {
-        if (entidades.existsByRuc(r.ruc())) {
-            throw new BadRequestException("El RUC ya existe");
+    public EntidadResponse crear(EntidadRequest request, String actor) {
+        if (entidades.existsByRuc(request.ruc())) {
+            throw new ConflictException("El RUC ya esta registrado");
         }
-
-        var e = new EntidadFinanciera();
-        e.setRuc(r.ruc());
-        e.setRazonSocial(r.razonSocial().trim());
-        e.setContacto(r.contacto());
-        e.setEmail(r.email());
-        e = entidades.save(e);
-
-        return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
+        var entidad = new EntidadFinanciera();
+        entidad.setRuc(request.ruc());
+        entidad.setRazonSocial(request.razonSocial().trim());
+        entidad.setContacto(request.contacto());
+        entidad.setEmail(request.email());
+        entidad = entidades.save(entidad);
+        auditoria.registrar(actor, "CREAR", "ENTIDAD", entidad.getId(), entidad.getRazonSocial());
+        return map(entidad);
     }
 
     @Transactional
-    public EntidadResponse actualizar(Long id, UpdateEntidadRequest r) {
-        var e = entidades.findById(id)
+    public EntidadResponse actualizar(Long id, UpdateEntidadRequest request, String actor) {
+        var entidad = entidades.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Entidad no encontrada"));
-        
-        if (!e.getRuc().equals(r.ruc()) && entidades.existsByRuc(r.ruc())) {
-            throw new BadRequestException("El RUC ya existe");
+        if (!entidad.getRuc().equals(request.ruc()) && entidades.existsByRuc(request.ruc())) {
+            throw new ConflictException("El RUC ya esta registrado");
         }
-
-        e.setRuc(r.ruc());
-        e.setRazonSocial(r.razonSocial().trim());
-        e.setContacto(r.contacto());
-        e.setEmail(r.email());
-        e.setActivo(r.activo());
-        e = entidades.save(e);
-
-        return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
+        entidad.setRuc(request.ruc());
+        entidad.setRazonSocial(request.razonSocial().trim());
+        entidad.setContacto(request.contacto());
+        entidad.setEmail(request.email());
+        entidad.setActivo(request.activo());
+        entidad = entidades.save(entidad);
+        auditoria.registrar(actor, "ACTUALIZAR", "ENTIDAD", entidad.getId(), entidad.getRazonSocial());
+        return map(entidad);
     }
 
     @Transactional
-    public EntidadResponse cambiarEstadoEntidad(Long id, CambioEstadoEntidadRequest r) {
-        var e = entidades.findById(id)
+    public EntidadResponse cambiarEstadoEntidad(Long id, CambioEstadoEntidadRequest request, String actor) {
+        var entidad = entidades.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Entidad no encontrada"));
-
-        e.setActivo(r.activo());
-        e = entidades.save(e);
-
-        return new EntidadResponse(e.getId(), e.getRuc(), e.getRazonSocial(), e.getContacto(), e.getEmail(), e.isActivo());
+        entidad.setActivo(request.activo());
+        entidad = entidades.save(entidad);
+        auditoria.registrar(
+                actor, "CAMBIAR_ESTADO", "ENTIDAD", entidad.getId(),
+                request.activo() ? "Entidad habilitada" : "Entidad deshabilitada"
+        );
+        return map(entidad);
     }
 
     @Transactional(readOnly = true)
@@ -87,83 +86,126 @@ public class CatalogoService {
     }
 
     @Transactional
-    public AnalistaResponse crear(AnalistaRequest r) {
-        if (analistas.existsByCodigo(r.codigo()) || usuarios.findByEmailIgnoreCase(r.email()).isPresent()) {
-            throw new BadRequestException("Email o codigo ya existe");
+    public AnalistaResponse crear(AnalistaRequest request, String actor) {
+        String email = normalizeEmail(request.email());
+        String codigo = normalizeCode(request.codigo());
+        if (analistas.existsByCodigo(codigo)) {
+            throw new ConflictException("El codigo del analista ya esta registrado");
         }
-
-        String tempPass = "Demo!" + (100000 + new SecureRandom().nextInt(900000)) + "Aa";
-        var u = new Usuario();
-        u.setNombreCompleto(r.nombre());
-        u.setEmail(r.email());
-        u.setPasswordHash(encoder.encode(tempPass));
-        u.setRol(roles.findByNombre("BANK_ANALYST")
+        if (usuarios.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("El correo electronico ya esta registrado");
+        }
+        var entidad = activeEntity(request.entidadId());
+        var usuario = new Usuario();
+        usuario.setNombreCompleto(request.nombre().trim());
+        usuario.setEmail(email);
+        usuario.setPasswordHash(encoder.encode(request.password()));
+        usuario.setRol(roles.findByNombre("BANK_ANALYST")
                 .orElseThrow(() -> new BadRequestException("Rol BANK_ANALYST no configurado")));
-        
-        var entidad = entidades.findById(r.entidadId())
-                .orElseThrow(() -> new BadRequestException("Entidad financiera no encontrada"));
-        u.setEntidad(entidad);
+        usuario.setEntidad(entidad);
+        usuario.setActivo(true);
+        usuario.setSessionVersion(1);
+        usuario = usuarios.save(usuario);
 
-        u = usuarios.save(u);
-
-        var a = new Analista();
-        a.setUsuario(u);
-        a.setCodigo(r.codigo());
-        a = analistas.save(a);
-
-        return new AnalistaResponse(a.getId(), a.getCodigo(), a.getUsuario().getNombreCompleto(), a.getUsuario().getEmail(), a.isDisponible(), tempPass, entidad.getId(), entidad.getRazonSocial());
+        var analista = new Analista();
+        analista.setUsuario(usuario);
+        analista.setCodigo(codigo);
+        analista.setDisponible(true);
+        analista = analistas.save(analista);
+        auditoria.registrar(actor, "CREAR", "ANALISTA", analista.getId(), analista.getCodigo());
+        return map(analista);
     }
 
     @Transactional
-    public AnalistaResponse actualizar(Long id, UpdateAnalistaRequest r) {
-        var a = analistas.findById(id)
+    public AnalistaResponse actualizar(Long id, UpdateAnalistaRequest request, String actor) {
+        var analista = analistas.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
-        var u = a.getUsuario();
-
-        if (!a.getCodigo().equals(r.codigo()) && analistas.existsByCodigo(r.codigo())) {
-            throw new BadRequestException("El código ya está en uso");
+        var usuario = analista.getUsuario();
+        String codigo = normalizeCode(request.codigo());
+        String email = normalizeEmail(request.email());
+        if (!analista.getCodigo().equals(codigo) && analistas.existsByCodigo(codigo)) {
+            throw new ConflictException("El codigo del analista ya esta registrado");
         }
-        if (!u.getEmail().equalsIgnoreCase(r.email()) && usuarios.findByEmailIgnoreCase(r.email()).isPresent()) {
-            throw new BadRequestException("El email ya está en uso");
+        if (!usuario.getEmail().equalsIgnoreCase(email) && usuarios.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("El correo electronico ya esta registrado");
         }
+        var entidad = activeEntity(request.entidadId());
+        usuario.setNombreCompleto(request.nombre().trim());
+        usuario.setEmail(email);
+        usuario.setEntidad(entidad);
+        syncAccess(analista, usuario, request.disponible());
+        usuarios.save(usuario);
 
-        var entidad = entidades.findById(r.entidadId())
-                .orElseThrow(() -> new BadRequestException("Entidad financiera no encontrada"));
-
-        u.setNombreCompleto(r.nombre());
-        u.setEmail(r.email());
-        u.setEntidad(entidad);
-        usuarios.save(u);
-
-        a.setCodigo(r.codigo());
-        a.setDisponible(r.disponible());
-        a = analistas.save(a);
-
-        return new AnalistaResponse(a.getId(), a.getCodigo(), u.getNombreCompleto(), u.getEmail(), a.isDisponible(), null, entidad.getId(), entidad.getRazonSocial());
+        analista.setCodigo(codigo);
+        analista = analistas.save(analista);
+        auditoria.registrar(actor, "ACTUALIZAR", "ANALISTA", analista.getId(), analista.getCodigo());
+        return map(analista);
     }
 
     @Transactional
-    public AnalistaResponse cambiarEstadoAnalista(Long id, CambioEstadoAnalistaRequest r) {
-        var a = analistas.findById(id)
+    public AnalistaResponse cambiarEstadoAnalista(Long id, CambioEstadoAnalistaRequest request, String actor) {
+        var analista = analistas.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
-
-        a.setDisponible(r.disponible());
-        a = analistas.save(a);
-
-        return map(a);
+        syncAccess(analista, analista.getUsuario(), request.disponible());
+        usuarios.save(analista.getUsuario());
+        analista = analistas.save(analista);
+        auditoria.registrar(
+                actor, "CAMBIAR_ESTADO", "ANALISTA", analista.getId(),
+                request.disponible() ? "Analista habilitado" : "Analista deshabilitado"
+        );
+        return map(analista);
     }
 
-    private AnalistaResponse map(Analista a) {
-        var u = a.getUsuario();
+    @Transactional
+    public void restablecerPasswordAnalista(Long id, ResetPasswordAnalistaRequest request, String actor) {
+        var analista = analistas.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
+        var usuario = analista.getUsuario();
+        usuario.setPasswordHash(encoder.encode(request.password()));
+        usuario.setSessionVersion(usuario.getSessionVersion() + 1);
+        usuarios.save(usuario);
+        auditoria.registrar(actor, "RESTABLECER_PASSWORD", "ANALISTA", analista.getId(), analista.getCodigo());
+    }
+
+    private void syncAccess(Analista analista, Usuario usuario, boolean enabled) {
+        if (analista.isDisponible() != enabled || usuario.isActivo() != enabled) {
+            usuario.setSessionVersion(usuario.getSessionVersion() + 1);
+        }
+        analista.setDisponible(enabled);
+        usuario.setActivo(enabled);
+    }
+
+    private EntidadFinanciera activeEntity(Long id) {
+        var entidad = entidades.findById(id)
+                .orElseThrow(() -> new BadRequestException("Entidad financiera no encontrada"));
+        if (!entidad.isActivo()) {
+            throw new BadRequestException("La entidad financiera esta inactiva");
+        }
+        return entidad;
+    }
+
+    private String normalizeEmail(String value) {
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeCode(String value) {
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private EntidadResponse map(EntidadFinanciera entidad) {
+        return new EntidadResponse(
+                entidad.getId(), entidad.getRuc(), entidad.getRazonSocial(),
+                entidad.getContacto(), entidad.getEmail(), entidad.isActivo()
+        );
+    }
+
+    private AnalistaResponse map(Analista analista) {
+        var usuario = analista.getUsuario();
         return new AnalistaResponse(
-                a.getId(),
-                a.getCodigo(),
-                u.getNombreCompleto(),
-                u.getEmail(),
-                a.isDisponible(),
-                null,
-                u.getEntidad() != null ? u.getEntidad().getId() : null,
-                u.getEntidad() != null ? u.getEntidad().getRazonSocial() : null
+                analista.getId(), analista.getCodigo(), usuario.getNombreCompleto(), usuario.getEmail(),
+                analista.isDisponible(),
+                usuario.getEntidad() == null ? null : usuario.getEntidad().getId(),
+                usuario.getEntidad() == null ? null : usuario.getEntidad().getRazonSocial()
         );
     }
 }

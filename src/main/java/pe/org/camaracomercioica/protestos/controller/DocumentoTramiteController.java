@@ -9,6 +9,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import pe.org.camaracomercioica.protestos.dto.DocumentoTramiteResponse;
@@ -42,17 +43,18 @@ public class DocumentoTramiteController {
             @RequestParam(required = false) String descripcion,
             @RequestParam(required = false) Integer orden,
             @RequestParam(required = false, defaultValue = "FORMATO_REQUERIDO") String tipo,
-            @RequestPart MultipartFile file
+            @RequestPart MultipartFile file,
+            Authentication authentication
     ) throws IOException {
-        return service.crear(titulo, descripcion, orden, tipo, file);
+        return service.crear(titulo, descripcion, orden, tipo, file, authentication.getName());
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Eliminar documento oficial", description = "Elimina definitivamente el registro y su archivo almacenado.")
     @ApiResponse(responseCode = "204", description = "Documento eliminado")
-    public void eliminar(@PathVariable Long id) {
-        service.eliminar(id);
+    public void eliminar(@PathVariable Long id, Authentication authentication) {
+        service.eliminar(id, authentication.getName());
     }
 
     @GetMapping("/{id}/download")

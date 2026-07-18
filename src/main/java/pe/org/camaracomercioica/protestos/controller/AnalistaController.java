@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import pe.org.camaracomercioica.protestos.dto.*;
 import pe.org.camaracomercioica.protestos.service.CatalogoService;
@@ -35,8 +36,8 @@ public class AnalistaController {
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
-    public AnalistaResponse crear(@Valid @RequestBody AnalistaRequest r) {
-        return service.crear(r);
+    public AnalistaResponse crear(@Valid @RequestBody AnalistaRequest r, Authentication authentication) {
+        return service.crear(r, authentication.getName());
     }
 
     @PutMapping("/{id}")
@@ -46,8 +47,8 @@ public class AnalistaController {
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
     @ApiResponse(responseCode = "404", description = "Analista no encontrado")
-    public AnalistaResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateAnalistaRequest r) {
-        return service.actualizar(id, r);
+    public AnalistaResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateAnalistaRequest r, Authentication authentication) {
+        return service.actualizar(id, r, authentication.getName());
     }
 
     @PatchMapping("/{id}/estado")
@@ -57,7 +58,18 @@ public class AnalistaController {
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
     @ApiResponse(responseCode = "404", description = "Analista no encontrado")
-    public AnalistaResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoAnalistaRequest r) {
-        return service.cambiarEstadoAnalista(id, r);
+    public AnalistaResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoAnalistaRequest r, Authentication authentication) {
+        return service.cambiarEstadoAnalista(id, r, authentication.getName());
+    }
+
+    @PatchMapping("/{id}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Restablecer contrasena", description = "Asigna una nueva contrasena e invalida las sesiones anteriores del analista.")
+    public void restablecerPassword(
+            @PathVariable Long id,
+            @Valid @RequestBody ResetPasswordAnalistaRequest request,
+            Authentication authentication
+    ) {
+        service.restablecerPasswordAnalista(id, request, authentication.getName());
     }
 }

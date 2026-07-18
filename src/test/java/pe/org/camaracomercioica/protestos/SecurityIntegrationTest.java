@@ -4,8 +4,8 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
  "springdoc.api-docs.enabled=false",
  "springdoc.swagger-ui.enabled=false"
 }) @AutoConfigureMockMvc class SecurityIntegrationTest {
- @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired PasswordEncoder encoder;
- @BeforeEach void seed(){if(users.findByEmailIgnoreCase("login@test.local").isEmpty()){var role=roles.findByNombre("CCI_ADMIN").orElseGet(()->{var r=new Rol();r.setNombre("CCI_ADMIN");return roles.save(r);});var entidad=new EntidadFinanciera();entidad.setRuc("20999999999");entidad.setRazonSocial("Entidad Test");entidad=entidades.save(entidad);var u=new Usuario();u.setNombreCompleto("Login Test");u.setEmail("login@test.local");u.setPasswordHash(encoder.encode("Password1!"));u.setRol(role);u.setEntidad(entidad);users.save(u);}}
+ @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired AnalistaRepository analistas; @Autowired PasswordEncoder encoder; @Autowired pe.org.camaracomercioica.protestos.security.LoginRateLimitFilter loginRateLimitFilter; @Autowired pe.org.camaracomercioica.protestos.service.AuditoriaService auditoriaService;
+ @BeforeEach void seed(){((java.util.Map<?,?>)org.springframework.test.util.ReflectionTestUtils.getField(loginRateLimitFilter,"attempts")).clear();if(users.findByEmailIgnoreCase("login@test.local").isEmpty()){var role=roles.findByNombre("CCI_ADMIN").orElseGet(()->{var r=new Rol();r.setNombre("CCI_ADMIN");return roles.save(r);});var entidad=new EntidadFinanciera();entidad.setRuc("20999999999");entidad.setRazonSocial("Entidad Test");entidad=entidades.save(entidad);var u=new Usuario();u.setNombreCompleto("Login Test");u.setEmail("login@test.local");u.setPasswordHash(encoder.encode("Password1!"));u.setRol(role);u.setEntidad(entidad);users.save(u);}}
  @Test void error401UsaContratoApiError() throws Exception {mvc.perform(get("/api/solicitudes")).andExpect(status().isUnauthorized()).andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)).andExpect(jsonPath("$.code").value("UNAUTHORIZED")).andExpect(jsonPath("$.path").value("/api/solicitudes"));}
  @Test void loginExitosoEntregaJwtSoloEnCookieHttpOnly() throws Exception {mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"login@test.local\",\"password\":\"Password1!\"}")) .andExpect(status().isOk()).andExpect(cookie().httpOnly("CCI_ACCESS_TOKEN",true)).andExpect(cookie().sameSite("CCI_ACCESS_TOKEN","Strict")).andExpect(jsonPath("$.accessToken").doesNotExist()).andExpect(jsonPath("$.usuario.roles[0]").value("CCI_ADMIN"));}
  @Test void deudorPuedeIniciarSesionConDocumento() throws Exception {mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"20123456789\",\"password\":\"password\"}")) .andExpect(status().isOk()).andExpect(jsonPath("$.usuario.email").value("deudor@demo.local")).andExpect(jsonPath("$.usuario.roles[0]").value("USER_DEBTOR"));}
@@ -35,6 +35,48 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
     .andExpect(status().isNotFound())
     .andExpect(jsonPath("$.code").value("NOT_FOUND"))
     .andExpect(jsonPath("$.path").value("/v3/api-docs"));
+ }
+ @Test void administradorGestionaCredencialesEInvalidaSesionesDelAnalista() throws Exception {
+  String email="analista.seguridad@test.local";
+  users.findByEmailIgnoreCase(email).ifPresent(user->{analistas.findAll().stream().filter(item->item.getUsuario().getId().equals(user.getId())).findFirst().ifPresent(analistas::delete);users.delete(user);});
+  long entidadId=entidades.findByRuc("20999999999").orElseThrow().getId();
+  String create="{\"nombre\":\"Analista Seguridad\",\"email\":\""+email+"\",\"codigo\":\"AN-SEC-01\",\"entidadId\":"+entidadId+",\"password\":\"Inicial1!\"}";
+  var admin=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("login@test.local").roles("CCI_ADMIN");
+  var created=mvc.perform(post("/api/analistas").with(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(create))
+    .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email)).andExpect(jsonPath("$.password").doesNotExist()).andReturn();
+  long analystId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(created.getResponse().getContentAsString()).get("id").asLong();
+  var login=mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"Inicial1!\"}"))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.usuario.roles[0]").value("BANK_ANALYST")).andReturn();
+  var oldCookie=login.getResponse().getCookie("CCI_ACCESS_TOKEN");
+  mvc.perform(patch("/api/analistas/"+analystId+"/password").with(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"debil\"}"))
+    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+  mvc.perform(patch("/api/analistas/"+analystId+"/password").with(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"NuevaClave2@\"}"))
+    .andExpect(status().isNoContent());
+  mvc.perform(get("/api/v1/auth/session").cookie(oldCookie)).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"Inicial1!\"}"))
+    .andExpect(status().isUnauthorized());
+  var newLogin=mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"NuevaClave2@\"}"))
+    .andExpect(status().isOk()).andReturn();
+  mvc.perform(patch("/api/analistas/"+analystId+"/estado").with(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"disponible\":false}"))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.disponible").value(false));
+  mvc.perform(get("/api/v1/auth/session").cookie(newLogin.getResponse().getCookie("CCI_ACCESS_TOKEN"))).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"NuevaClave2@\"}"))
+    .andExpect(status().isUnauthorized());
+ }
+ @Test void notificacionesSonPersistentesYExclusivasDelErp() throws Exception {
+  auditoriaService.registrar("integration@test.local","ACTUALIZAR","ENTIDAD",1L,"Actividad de prueba");
+  var admin=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("login@test.local").roles("CCI_ADMIN");
+  var response=mvc.perform(get("/api/v1/erp/notificaciones").param("limit","10").with(admin))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray()).andExpect(jsonPath("$.unreadCount").value(org.hamcrest.Matchers.greaterThan(0))).andReturn();
+  var root=new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.getResponse().getContentAsString());
+  if(!root.get("items").isEmpty()){
+   long newest=root.get("items").get(0).get("id").asLong();
+   mvc.perform(patch("/api/v1/erp/notificaciones/leidas").with(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"throughId\":"+newest+"}"))
+     .andExpect(status().isNoContent());
+   mvc.perform(get("/api/v1/erp/notificaciones").with(admin)).andExpect(status().isOk()).andExpect(jsonPath("$.unreadCount").value(0));
+  }
+  mvc.perform(get("/api/v1/erp/notificaciones").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("staff@demo.local").roles("CCI_STAFF"))).andExpect(status().isOk()).andExpect(jsonPath("$.unreadCount").value(org.hamcrest.Matchers.greaterThan(0)));
+  mvc.perform(get("/api/v1/erp/notificaciones").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("deudor@demo.local").roles("USER_DEBTOR"))).andExpect(status().isForbidden());
  }
  private byte[] excelValido() throws Exception {
   String[] headers={"Tipo_Documento","Numero_Documento","Nombre_Razon_Social","Tipo_Persona","Email_Deudor","Telefono_Deudor","RUC_Entidad_Financiera","Numero_Titulo","Tipo_Titulo","Fecha_Protesto","Fecha_Vencimiento","Moneda","Monto","Estado","Observaciones","Codigo_Externo"};

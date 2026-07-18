@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import pe.org.camaracomercioica.protestos.dto.*;
 import pe.org.camaracomercioica.protestos.service.CatalogoService;
@@ -34,8 +35,8 @@ public class EntidadController {
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
-    public EntidadResponse crear(@Valid @RequestBody EntidadRequest r) {
-        return service.crear(r);
+    public EntidadResponse crear(@Valid @RequestBody EntidadRequest r, Authentication authentication) {
+        return service.crear(r, authentication.getName());
     }
 
     @PutMapping("/{id}")
@@ -45,8 +46,8 @@ public class EntidadController {
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
     @ApiResponse(responseCode = "404", description = "Entidad no encontrada")
-    public EntidadResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateEntidadRequest r) {
-        return service.actualizar(id, r);
+    public EntidadResponse actualizar(@PathVariable Long id, @Valid @RequestBody UpdateEntidadRequest r, Authentication authentication) {
+        return service.actualizar(id, r, authentication.getName());
     }
 
     @PatchMapping("/{id}/estado")
@@ -56,7 +57,7 @@ public class EntidadController {
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
     @ApiResponse(responseCode = "404", description = "Entidad no encontrada")
-    public EntidadResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoEntidadRequest r) {
-        return service.cambiarEstadoEntidad(id, r);
+    public EntidadResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoEntidadRequest r, Authentication authentication) {
+        return service.cambiarEstadoEntidad(id, r, authentication.getName());
     }
 }

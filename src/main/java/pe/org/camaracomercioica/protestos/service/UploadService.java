@@ -49,6 +49,7 @@ public class UploadService {
     private final SolicitudRepository solicitudes;
     private final UsuarioRepository usuarios;
     private final ExcelImportService excelImportService;
+    private final AuditoriaService auditoria;
 
     @Value("${app.storage.max-bytes:10485760}")
     private long maxBytes;
@@ -163,6 +164,10 @@ public class UploadService {
 
         var response = excelImportService.importRows(file, carga, allowedRuc, maxBytes);
         cargas.saveAndFlush(carga);
+        auditoria.registrar(
+                email, "IMPORTAR", "CARGA_EXCEL", carga.getId(),
+                carga.getNombreArchivo() + " - " + carga.getEstado().name()
+        );
         return response;
     }
 

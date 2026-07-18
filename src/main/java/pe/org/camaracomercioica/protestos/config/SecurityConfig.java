@@ -27,6 +27,7 @@ import pe.org.camaracomercioica.protestos.security.CookieBearerTokenResolver;
 import pe.org.camaracomercioica.protestos.security.DatabaseUserDetailsService;
 import pe.org.camaracomercioica.protestos.security.LoginRateLimitFilter;
 import pe.org.camaracomercioica.protestos.security.SecurityErrorHandler;
+import pe.org.camaracomercioica.protestos.security.UserSessionTokenValidator;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -55,14 +56,16 @@ public class SecurityConfig {
     @Bean
     JwtDecoder jwtDecoder(
             @Value("${app.security.jwt.secret}") String secret,
-            @Value("${app.security.jwt.issuer}") String issuer
+            @Value("${app.security.jwt.issuer}") String issuer,
+            UserSessionTokenValidator sessionValidator
     ) {
         var decoder = NimbusJwtDecoder.withSecretKey(key(secret))
                 .macAlgorithm(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256)
                 .build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefault(),
-                new JwtIssuerValidator(issuer)
+                new JwtIssuerValidator(issuer),
+                sessionValidator
         ));
         return decoder;
     }

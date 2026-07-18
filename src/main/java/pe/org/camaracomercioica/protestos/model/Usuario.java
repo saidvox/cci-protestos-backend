@@ -46,6 +46,12 @@ public class Usuario {
     @Column(nullable = false)
     private boolean activo = true;
 
+    @Column(nullable = false)
+    private int sessionVersion;
+
+    @Column(nullable = false)
+    private long ultimaNotificacionVistaId;
+
     @Column(nullable = false, updatable = false)
     private Instant creadoEn = Instant.now();
 
