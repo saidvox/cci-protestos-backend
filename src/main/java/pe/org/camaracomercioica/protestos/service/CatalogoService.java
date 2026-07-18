@@ -195,6 +195,31 @@ public class CatalogoService {
         return new AnalistaInvitationResponse(map(analista), invitation.token(), invitation.expiresAt());
     }
 
+    @Transactional
+    public AnalistaInvitationResponse reiniciarActivacion(Long id, String actor) {
+        var analista = analistas.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
+        var usuario = analista.getUsuario();
+        if (usuario.getActivadoEn() == null) {
+            throw new BadRequestException("La cuenta ya esta pendiente de activacion; genere un nuevo enlace");
+        }
+        if (usuario.getEntidad() == null || !usuario.getEntidad().isActivo()) {
+            throw new BadRequestException("La entidad financiera asociada esta inactiva");
+        }
+
+        usuario.setActivo(false);
+        usuario.setActivadoEn(null);
+        usuario.setPasswordHash(encoder.encode(java.util.UUID.randomUUID().toString()));
+        usuario.setSessionVersion(usuario.getSessionVersion() + 1);
+        analista.setDisponible(false);
+        usuarios.save(usuario);
+        analistas.save(analista);
+
+        auditoria.registrar(actor, "REINICIAR_ACTIVACION", "ANALISTA", analista.getId(), analista.getCodigo());
+        var invitation = invitationService.emitir(analista, actor);
+        return new AnalistaInvitationResponse(map(analista), invitation.token(), invitation.expiresAt());
+    }
+
     private void syncAccess(Analista analista, Usuario usuario, boolean enabled) {
         if (analista.isDisponible() != enabled || usuario.isActivo() != enabled) {
             usuario.setSessionVersion(usuario.getSessionVersion() + 1);

@@ -47,6 +47,15 @@ public class AnalistaController {
         return invitation;
     }
 
+    @PostMapping("/{id}/reactivacion")
+    @Operation(
+            summary = "Reiniciar activacion",
+            description = "Invalida el acceso actual y genera una nueva invitacion de activacion de un solo uso."
+    )
+    public AnalistaInvitationResponse reiniciarActivacion(@PathVariable Long id, Authentication authentication) {
+        return service.reiniciarActivacion(id, authentication.getName());
+    }
+
     @PutMapping("/{id}")
     @Operation(summary = "Actualizar analista", description = "Actualiza los datos de un analista existente. Exclusivo para administradores.")
     @ApiResponse(responseCode = "200", description = "Analista actualizado correctamente")

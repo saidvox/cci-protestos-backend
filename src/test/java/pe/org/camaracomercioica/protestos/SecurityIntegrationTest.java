@@ -85,11 +85,22 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
   mvc.perform(get("/api/v1/auth/session").cookie(newLogin.getResponse().getCookie("CCI_ACCESS_TOKEN"))).andExpect(status().isUnauthorized());
   mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"NuevaClave2@\"}"))
     .andExpect(status().isUnauthorized());
+  var restarted=mvc.perform(post("/api/analistas/"+analystId+"/reactivacion").with(admin).with(csrf()))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.analista.accessStatus").value("PENDING_ACTIVATION"))
+    .andExpect(jsonPath("$.activationToken").isNotEmpty()).andReturn();
+  String restartToken=mapper.readTree(restarted.getResponse().getContentAsString()).get("activationToken").asText();
+  mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"NuevaClave2@\"}"))
+    .andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/v1/auth/analyst-activation").contentType(MediaType.APPLICATION_JSON).content("{\"token\":\""+restartToken+"\",\"password\":\"Reactivada3#\"}"))
+    .andExpect(status().isNoContent());
+  mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"Reactivada3#\"}"))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.usuario.roles[0]").value("BANK_ANALYST"));
  }
  @Test @WithMockUser(roles="CCI_STAFF") void staffNoPuedeCrearNiRegenerarInvitacionesDeAnalista() throws Exception {
   mvc.perform(post("/api/analistas").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Sin permiso\",\"email\":\"staff.invita@test.local\",\"codigo\":\"AN-NO\",\"entidadId\":1}"))
     .andExpect(status().isForbidden());
   mvc.perform(post("/api/analistas/1/invitacion").with(csrf())).andExpect(status().isForbidden());
+  mvc.perform(post("/api/analistas/1/reactivacion").with(csrf())).andExpect(status().isForbidden());
  }
  @Test void notificacionesSonPersistentesYExclusivasDelErp() throws Exception {
   auditoriaService.registrar("integration@test.local","ACTUALIZAR","ENTIDAD",1L,"Actividad de prueba");
