@@ -19,6 +19,7 @@ import pe.org.camaracomercioica.protestos.dto.CargaExcelResponse;
 import pe.org.camaracomercioica.protestos.dto.ExcelImportResponse;
 import pe.org.camaracomercioica.protestos.dto.ExcelValidationResponse;
 import pe.org.camaracomercioica.protestos.dto.UploadResponse;
+import pe.org.camaracomercioica.protestos.exception.BadRequestException;
 import pe.org.camaracomercioica.protestos.exception.ResourceNotFoundException;
 import pe.org.camaracomercioica.protestos.model.CargaExcel;
 import pe.org.camaracomercioica.protestos.model.Documento;
@@ -79,6 +80,18 @@ public class UploadService {
         documento = documentos.saveAndFlush(documento);
 
         return new UploadResponse(documento.getId(), documento.getNombreOriginal(), "RECIBIDO", "Documento almacenado");
+    }
+
+    @Transactional
+    public List<UploadResponse> documentos(Long solicitudId, List<MultipartFile> files, String email, boolean staff) throws IOException {
+        if (files == null || files.isEmpty()) {
+            throw new BadRequestException("Debe adjuntar al menos un documento");
+        }
+        var responses = new java.util.ArrayList<UploadResponse>(files.size());
+        for (var file : files) {
+            responses.add(documento(solicitudId, file, email, staff));
+        }
+        return responses;
     }
 
     @Transactional(readOnly = true)

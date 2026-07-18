@@ -46,6 +46,17 @@ public class UploadController {
         return service.documento(solicitudId, file, auth.getName(), staff(auth));
     }
 
+    @PostMapping(value = "/api/documentos/solicitud/{solicitudId}/upload-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Cargar documentos pendientes", description = "Guarda varios adjuntos de una solicitud en una sola operacion transaccional.")
+    public List<UploadResponse> documentos(
+            @PathVariable Long solicitudId,
+            @RequestPart("files") List<MultipartFile> files,
+            Authentication auth
+    ) throws IOException {
+        return service.documentos(solicitudId, files, auth.getName(), staff(auth));
+    }
+
     @GetMapping("/api/documentos/solicitud/{solicitudId}")
     @Operation(summary = "Listar documentos adjuntos", description = "Lista los archivos cargados como sustento para una solicitud.")
     public List<DocumentoResponse> listarDocumentos(@PathVariable Long solicitudId, Authentication auth) {

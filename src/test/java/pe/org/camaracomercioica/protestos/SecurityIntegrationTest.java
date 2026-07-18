@@ -4,7 +4,7 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
  "springdoc.api-docs.enabled=false",
  "springdoc.swagger-ui.enabled=false"
 }) @AutoConfigureMockMvc class SecurityIntegrationTest {
- @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired AnalistaRepository analistas; @Autowired InvitacionAnalistaRepository invitaciones; @Autowired PasswordEncoder encoder; @Autowired pe.org.camaracomercioica.protestos.security.LoginRateLimitFilter loginRateLimitFilter; @Autowired pe.org.camaracomercioica.protestos.service.AuditoriaService auditoriaService;
+ @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired AnalistaRepository analistas; @Autowired InvitacionAnalistaRepository invitaciones; @Autowired SolicitudRepository solicitudes; @Autowired DocumentoRepository documentos; @Autowired PasswordEncoder encoder; @Autowired pe.org.camaracomercioica.protestos.security.LoginRateLimitFilter loginRateLimitFilter; @Autowired pe.org.camaracomercioica.protestos.service.AuditoriaService auditoriaService;
  @BeforeEach void seed(){((java.util.Map<?,?>)org.springframework.test.util.ReflectionTestUtils.getField(loginRateLimitFilter,"attempts")).clear();if(users.findByEmailIgnoreCase("login@test.local").isEmpty()){var role=roles.findByNombre("CCI_ADMIN").orElseGet(()->{var r=new Rol();r.setNombre("CCI_ADMIN");return roles.save(r);});var entidad=new EntidadFinanciera();entidad.setRuc("20999999999");entidad.setRazonSocial("Entidad Test");entidad=entidades.save(entidad);var u=new Usuario();u.setNombreCompleto("Login Test");u.setEmail("login@test.local");u.setPasswordHash(encoder.encode("Password1!"));u.setRol(role);u.setEntidad(entidad);users.save(u);}}
  @Test void error401UsaContratoApiError() throws Exception {mvc.perform(get("/api/solicitudes")).andExpect(status().isUnauthorized()).andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)).andExpect(jsonPath("$.code").value("UNAUTHORIZED")).andExpect(jsonPath("$.path").value("/api/solicitudes"));}
  @Test void loginExitosoEntregaJwtSoloEnCookieHttpOnly() throws Exception {mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"login@test.local\",\"password\":\"Password1!\"}")) .andExpect(status().isOk()).andExpect(cookie().httpOnly("CCI_ACCESS_TOKEN",true)).andExpect(cookie().sameSite("CCI_ACCESS_TOKEN","Strict")).andExpect(jsonPath("$.accessToken").doesNotExist()).andExpect(jsonPath("$.usuario.roles[0]").value("CCI_ADMIN"));}
@@ -18,6 +18,28 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
  @Test @WithMockUser(roles="USER_DEBTOR") void deudorNoPuedeCrearEntidades() throws Exception {mvc.perform(post("/api/entidades").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"ruc\":\"20999999998\",\"razonSocial\":\"Entidad Test\",\"email\":\"contacto@test.local\"}")).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));}
  @Test @WithMockUser(roles="USER_DEBTOR") void deudorNoCargaExcel() throws Exception {var f=new MockMultipartFile("file","carga.xls","application/vnd.ms-excel",new byte[]{(byte)0xd0,(byte)0xcf,0x11,(byte)0xe0,(byte)0xa1,(byte)0xb1,0x1a,(byte)0xe1});mvc.perform(multipart("/api/excel/upload").file(f).with(csrf())).andExpect(status().isForbidden());}
  @Test @WithMockUser(username="login@test.local",roles="BANK_ANALYST") void analistaPuedeCargarExcel() throws Exception {var f=new MockMultipartFile("file","carga.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",excelValido());mvc.perform(multipart("/api/excel/upload").file(f).with(csrf())).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PROCESADA"));}
+ @Test void solicitudConDocumentosEsAtomica() throws Exception {
+  var admin=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("login@test.local").roles("CCI_ADMIN");
+  long entidadId=entidades.findByRuc("20999999999").orElseThrow().getId();
+  long solicitudesAntes=solicitudes.count();
+  String invalidJson="{\"entidadId\":"+entidadId+",\"tipoTramite\":\"REGISTRO_PROTESTO\",\"numeroDocumentoDeudor\":\"20988888001\",\"monto\":100,\"moneda\":\"PEN\",\"motivo\":\"Prueba atomica invalida\"}";
+  var invalidRequest=new MockMultipartFile("solicitud","","application/json",invalidJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+  var validPdf=new MockMultipartFile("files","voucher.pdf","application/pdf","%PDF-1.4\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+  var invalidFile=new MockMultipartFile("files","formato.txt","text/plain","archivo invalido".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+  mvc.perform(multipart("/api/solicitudes/con-documentos").file(invalidRequest).file(validPdf).file(invalidFile).with(admin).with(csrf()))
+    .andExpect(status().isBadRequest());
+  org.assertj.core.api.Assertions.assertThat(solicitudes.count()).isEqualTo(solicitudesAntes);
+
+  String validJson="{\"entidadId\":"+entidadId+",\"tipoTramite\":\"REGISTRO_PROTESTO\",\"numeroDocumentoDeudor\":\"20988888002\",\"monto\":100,\"moneda\":\"PEN\",\"motivo\":\"Prueba atomica valida\"}";
+  var validRequest=new MockMultipartFile("solicitud","","application/json",validJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+  var result=mvc.perform(multipart("/api/solicitudes/con-documentos").file(validRequest).file(validPdf).with(admin).with(csrf()))
+    .andExpect(status().isCreated()).andExpect(jsonPath("$.codigo").isNotEmpty()).andReturn();
+  long solicitudId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(result.getResponse().getContentAsString()).get("id").asLong();
+  org.assertj.core.api.Assertions.assertThat(documentos.findBySolicitudIdOrderByCreadoEnAsc(solicitudId)).hasSize(1);
+  mvc.perform(multipart("/api/documentos/solicitud/"+solicitudId+"/upload-batch").file(validPdf).file(invalidFile).with(admin).with(csrf()))
+    .andExpect(status().isBadRequest());
+  org.assertj.core.api.Assertions.assertThat(documentos.findBySolicitudIdOrderByCreadoEnAsc(solicitudId)).hasSize(1);
+ }
  @Test void validaPayloadLogin() throws Exception {mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"mal\",\"password\":\"1\"}")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));}
  @Test void usuariosInicialesPuedenIniciarSesion() throws Exception {
   String[] users={"admin@demo.local:CCI_ADMIN","staff@demo.local:CCI_STAFF","analista@demo.local:BANK_ANALYST","deudor@demo.local:USER_DEBTOR"};

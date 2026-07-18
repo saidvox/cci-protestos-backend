@@ -11,9 +11,14 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import pe.org.camaracomercioica.protestos.dto.*;
 import pe.org.camaracomercioica.protestos.model.EstadoSolicitud;
 import pe.org.camaracomercioica.protestos.service.SolicitudService;
+import pe.org.camaracomercioica.protestos.service.SolicitudSubmissionService;
+
+import java.io.IOException;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/solicitudes")
@@ -22,6 +27,7 @@ import pe.org.camaracomercioica.protestos.service.SolicitudService;
 public class SolicitudController {
 
     private final SolicitudService service;
+    private final SolicitudSubmissionService submissionService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -30,6 +36,20 @@ public class SolicitudController {
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     public SolicitudResponse crear(@Valid @RequestBody SolicitudRequest r, Authentication a) {
         return service.crear(r, a.getName());
+    }
+
+    @PostMapping(value = "/con-documentos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(
+            summary = "Crear solicitud con documentos",
+            description = "Registra la solicitud y todos sus adjuntos en una sola operacion transaccional."
+    )
+    public SolicitudResponse crearConDocumentos(
+            @Valid @RequestPart("solicitud") SolicitudRequest request,
+            @RequestPart("files") List<MultipartFile> files,
+            Authentication authentication
+    ) throws IOException {
+        return submissionService.crear(request, files, authentication.getName());
     }
 
     @GetMapping
