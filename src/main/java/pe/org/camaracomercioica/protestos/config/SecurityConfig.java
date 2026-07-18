@@ -95,7 +95,7 @@ public class SecurityConfig {
         return http
                 .csrf(c -> c.csrfTokenRepository(csrf)
                         .csrfTokenRequestHandler(new org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/auth/login", "/api/v1/auth/register"))
+                        .ignoringRequestMatchers("/api/auth/login", "/api/v1/auth/register", "/api/v1/auth/analyst-activation"))
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(e -> e.authenticationEntryPoint(errors).accessDeniedHandler(errors))
@@ -106,6 +106,7 @@ public class SecurityConfig {
                                 "/api/auth/csrf",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/debtor-lookup",
+                                "/api/v1/auth/analyst-activation",
                                 "/actuator/health",
                                 "/actuator/health/**",
                                 "/swagger-ui/**",

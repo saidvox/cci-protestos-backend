@@ -103,6 +103,7 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         user.setPasswordHash(passwordEncoder.encode(bootstrapAdminPassword));
         user.setRol(adminRole);
         user.setActivo(true);
+        user.setActivadoEn(java.time.Instant.now());
         usuarios.save(user);
     }
 
@@ -169,6 +170,7 @@ public class ApplicationDataInitializer implements CommandLineRunner {
         u.setEntidad(entidad);
         u.setDeudor(deudor);
         u.setActivo(true);
+        u.setActivadoEn(java.time.Instant.now());
         return usuarios.save(u);
     }
 

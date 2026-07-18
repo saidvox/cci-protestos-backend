@@ -11,6 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import pe.org.camaracomercioica.protestos.dto.*;
 import pe.org.camaracomercioica.protestos.service.AuthService;
+import pe.org.camaracomercioica.protestos.service.AnalystInvitationService;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -19,6 +20,7 @@ import pe.org.camaracomercioica.protestos.service.AuthService;
 public class AuthV1Controller {
 
     private final AuthService authService;
+    private final AnalystInvitationService analystInvitationService;
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
@@ -41,6 +43,21 @@ public class AuthV1Controller {
     ) {
         var result = authService.lookupDebtor(tipoDocumento, numeroDocumento);
         return new DebtorLookupResponse(result.found(), result.nombreCompleto());
+    }
+
+    @GetMapping("/analyst-activation")
+    @Operation(summary = "Validar invitacion de analista", description = "Comprueba un token de activacion y retorna los datos del puesto asociado.")
+    @SecurityRequirements
+    public AnalystActivationInfoResponse validateAnalystInvitation(@RequestParam String token) {
+        return analystInvitationService.validar(token);
+    }
+
+    @PostMapping("/analyst-activation")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Activar cuenta de analista", description = "Define la contrasena y habilita una cuenta BANK_ANALYST previamente invitada.")
+    @SecurityRequirements
+    public void activateAnalyst(@Valid @RequestBody AnalystActivationRequest request) {
+        analystInvitationService.activar(request);
     }
 
     @GetMapping("/session")

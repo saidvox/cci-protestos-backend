@@ -36,8 +36,15 @@ public class AnalistaController {
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "401", description = "No autorizado")
     @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol de administrador)")
-    public AnalistaResponse crear(@Valid @RequestBody AnalistaRequest r, Authentication authentication) {
+    public AnalistaInvitationResponse crear(@Valid @RequestBody AnalistaRequest r, Authentication authentication) {
         return service.crear(r, authentication.getName());
+    }
+
+    @PostMapping("/{id}/invitacion")
+    @Operation(summary = "Regenerar invitacion", description = "Revoca invitaciones anteriores y genera un nuevo token de activacion de un solo uso.")
+    public AnalistaInvitationResponse regenerarInvitacion(@PathVariable Long id, Authentication authentication) {
+        var invitation = service.regenerarInvitacion(id, authentication.getName());
+        return invitation;
     }
 
     @PutMapping("/{id}")

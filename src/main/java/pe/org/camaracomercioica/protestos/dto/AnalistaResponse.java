@@ -9,6 +9,7 @@ public record AnalistaResponse(
         String nombre,
         String email,
         boolean disponible,
+        String accessStatus,
         Long entidadId,
         String entidadNombre
 ) {

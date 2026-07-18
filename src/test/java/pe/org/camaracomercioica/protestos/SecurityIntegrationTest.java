@@ -4,7 +4,7 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
  "springdoc.api-docs.enabled=false",
  "springdoc.swagger-ui.enabled=false"
 }) @AutoConfigureMockMvc class SecurityIntegrationTest {
- @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired AnalistaRepository analistas; @Autowired PasswordEncoder encoder; @Autowired pe.org.camaracomercioica.protestos.security.LoginRateLimitFilter loginRateLimitFilter; @Autowired pe.org.camaracomercioica.protestos.service.AuditoriaService auditoriaService;
+ @Autowired MockMvc mvc; @Autowired RolRepository roles; @Autowired UsuarioRepository users; @Autowired EntidadFinancieraRepository entidades; @Autowired AnalistaRepository analistas; @Autowired InvitacionAnalistaRepository invitaciones; @Autowired PasswordEncoder encoder; @Autowired pe.org.camaracomercioica.protestos.security.LoginRateLimitFilter loginRateLimitFilter; @Autowired pe.org.camaracomercioica.protestos.service.AuditoriaService auditoriaService;
  @BeforeEach void seed(){((java.util.Map<?,?>)org.springframework.test.util.ReflectionTestUtils.getField(loginRateLimitFilter,"attempts")).clear();if(users.findByEmailIgnoreCase("login@test.local").isEmpty()){var role=roles.findByNombre("CCI_ADMIN").orElseGet(()->{var r=new Rol();r.setNombre("CCI_ADMIN");return roles.save(r);});var entidad=new EntidadFinanciera();entidad.setRuc("20999999999");entidad.setRazonSocial("Entidad Test");entidad=entidades.save(entidad);var u=new Usuario();u.setNombreCompleto("Login Test");u.setEmail("login@test.local");u.setPasswordHash(encoder.encode("Password1!"));u.setRol(role);u.setEntidad(entidad);users.save(u);}}
  @Test void error401UsaContratoApiError() throws Exception {mvc.perform(get("/api/solicitudes")).andExpect(status().isUnauthorized()).andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)).andExpect(jsonPath("$.code").value("UNAUTHORIZED")).andExpect(jsonPath("$.path").value("/api/solicitudes"));}
  @Test void loginExitosoEntregaJwtSoloEnCookieHttpOnly() throws Exception {mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"login@test.local\",\"password\":\"Password1!\"}")) .andExpect(status().isOk()).andExpect(cookie().httpOnly("CCI_ACCESS_TOKEN",true)).andExpect(cookie().sameSite("CCI_ACCESS_TOKEN","Strict")).andExpect(jsonPath("$.accessToken").doesNotExist()).andExpect(jsonPath("$.usuario.roles[0]").value("CCI_ADMIN"));}
@@ -36,15 +36,38 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
     .andExpect(jsonPath("$.code").value("NOT_FOUND"))
     .andExpect(jsonPath("$.path").value("/v3/api-docs"));
  }
- @Test void administradorGestionaCredencialesEInvalidaSesionesDelAnalista() throws Exception {
+ @Test void administradorInvitaAnalistaYLaActivacionEsDeUnSoloUso() throws Exception {
   String email="analista.seguridad@test.local";
-  users.findByEmailIgnoreCase(email).ifPresent(user->{analistas.findAll().stream().filter(item->item.getUsuario().getId().equals(user.getId())).findFirst().ifPresent(analistas::delete);users.delete(user);});
+  users.findByEmailIgnoreCase(email).ifPresent(user->{analistas.findAll().stream().filter(item->item.getUsuario().getId().equals(user.getId())).findFirst().ifPresent(item->{invitaciones.findAll().stream().filter(invitation->invitation.getAnalista().getId().equals(item.getId())).forEach(invitaciones::delete);analistas.delete(item);});users.delete(user);});
   long entidadId=entidades.findByRuc("20999999999").orElseThrow().getId();
-  String create="{\"nombre\":\"Analista Seguridad\",\"email\":\""+email+"\",\"codigo\":\"AN-SEC-01\",\"entidadId\":"+entidadId+",\"password\":\"Inicial1!\"}";
+  String create="{\"nombre\":\"Analista Seguridad\",\"email\":\""+email+"\",\"codigo\":\"AN-SEC-01\",\"entidadId\":"+entidadId+"}";
   var admin=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("login@test.local").roles("CCI_ADMIN");
   var created=mvc.perform(post("/api/analistas").with(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(create))
-    .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email)).andExpect(jsonPath("$.password").doesNotExist()).andReturn();
-  long analystId=new com.fasterxml.jackson.databind.ObjectMapper().readTree(created.getResponse().getContentAsString()).get("id").asLong();
+    .andExpect(status().isCreated()).andExpect(jsonPath("$.analista.email").value(email)).andExpect(jsonPath("$.analista.accessStatus").value("PENDING_ACTIVATION")).andExpect(jsonPath("$.activationToken").isNotEmpty()).andReturn();
+  var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+  var createdRoot=mapper.readTree(created.getResponse().getContentAsString());
+  long analystId=createdRoot.get("analista").get("id").asLong();
+  String oldToken=createdRoot.get("activationToken").asText();
+  mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"Inicial1!\"}"))
+    .andExpect(status().isUnauthorized());
+  var storedInvitation=invitaciones.findAll().stream().filter(item->item.getAnalista().getId().equals(analystId)).findFirst().orElseThrow();
+  storedInvitation.setExpiraEn(java.time.Instant.now().minusSeconds(1));
+  invitaciones.save(storedInvitation);
+  mvc.perform(get("/api/v1/auth/analyst-activation").param("token",oldToken)).andExpect(status().isBadRequest());
+  var regenerated=mvc.perform(post("/api/analistas/"+analystId+"/invitacion").with(admin).with(csrf()))
+    .andExpect(status().isOk()).andExpect(jsonPath("$.activationToken").isNotEmpty()).andReturn();
+  String token=mapper.readTree(regenerated.getResponse().getContentAsString()).get("activationToken").asText();
+  mvc.perform(get("/api/v1/auth/analyst-activation").param("token",oldToken)).andExpect(status().isBadRequest());
+  var entity=entidades.findById(entidadId).orElseThrow();entity.setActivo(false);entidades.save(entity);
+  mvc.perform(get("/api/v1/auth/analyst-activation").param("token",token)).andExpect(status().isBadRequest());
+  entity.setActivo(true);entidades.save(entity);
+  mvc.perform(get("/api/v1/auth/analyst-activation").param("token",token)).andExpect(status().isOk()).andExpect(jsonPath("$.email").value(email));
+  mvc.perform(post("/api/v1/auth/analyst-activation").contentType(MediaType.APPLICATION_JSON).content("{\"token\":\""+token+"\",\"password\":\"debil\"}"))
+    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+  mvc.perform(post("/api/v1/auth/analyst-activation").contentType(MediaType.APPLICATION_JSON).content("{\"token\":\""+token+"\",\"password\":\"Inicial1!\"}"))
+    .andExpect(status().isNoContent());
+  mvc.perform(post("/api/v1/auth/analyst-activation").contentType(MediaType.APPLICATION_JSON).content("{\"token\":\""+token+"\",\"password\":\"OtraClave2@\"}"))
+    .andExpect(status().isBadRequest());
   var login=mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"Inicial1!\"}"))
     .andExpect(status().isOk()).andExpect(jsonPath("$.usuario.roles[0]").value("BANK_ANALYST")).andReturn();
   var oldCookie=login.getResponse().getCookie("CCI_ACCESS_TOKEN");
@@ -62,6 +85,11 @@ import org.junit.jupiter.api.*; import org.springframework.beans.factory.annotat
   mvc.perform(get("/api/v1/auth/session").cookie(newLogin.getResponse().getCookie("CCI_ACCESS_TOKEN"))).andExpect(status().isUnauthorized());
   mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\",\"password\":\"NuevaClave2@\"}"))
     .andExpect(status().isUnauthorized());
+ }
+ @Test @WithMockUser(roles="CCI_STAFF") void staffNoPuedeCrearNiRegenerarInvitacionesDeAnalista() throws Exception {
+  mvc.perform(post("/api/analistas").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"nombre\":\"Sin permiso\",\"email\":\"staff.invita@test.local\",\"codigo\":\"AN-NO\",\"entidadId\":1}"))
+    .andExpect(status().isForbidden());
+  mvc.perform(post("/api/analistas/1/invitacion").with(csrf())).andExpect(status().isForbidden());
  }
  @Test void notificacionesSonPersistentesYExclusivasDelErp() throws Exception {
   auditoriaService.registrar("integration@test.local","ACTUALIZAR","ENTIDAD",1L,"Actividad de prueba");

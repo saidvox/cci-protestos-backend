@@ -29,6 +29,7 @@ public class CatalogoService {
     private final RolRepository roles;
     private final PasswordEncoder encoder;
     private final AuditoriaService auditoria;
+    private final AnalystInvitationService invitationService;
 
     @Transactional(readOnly = true)
     public List<EntidadResponse> entidades() {
@@ -86,7 +87,7 @@ public class CatalogoService {
     }
 
     @Transactional
-    public AnalistaResponse crear(AnalistaRequest request, String actor) {
+    public AnalistaInvitationResponse crear(AnalistaRequest request, String actor) {
         String email = normalizeEmail(request.email());
         String codigo = normalizeCode(request.codigo());
         if (analistas.existsByCodigo(codigo)) {
@@ -99,21 +100,22 @@ public class CatalogoService {
         var usuario = new Usuario();
         usuario.setNombreCompleto(request.nombre().trim());
         usuario.setEmail(email);
-        usuario.setPasswordHash(encoder.encode(request.password()));
+        usuario.setPasswordHash(encoder.encode(java.util.UUID.randomUUID().toString()));
         usuario.setRol(roles.findByNombre("BANK_ANALYST")
                 .orElseThrow(() -> new BadRequestException("Rol BANK_ANALYST no configurado")));
         usuario.setEntidad(entidad);
-        usuario.setActivo(true);
+        usuario.setActivo(false);
         usuario.setSessionVersion(1);
         usuario = usuarios.save(usuario);
 
         var analista = new Analista();
         analista.setUsuario(usuario);
         analista.setCodigo(codigo);
-        analista.setDisponible(true);
+        analista.setDisponible(false);
         analista = analistas.save(analista);
         auditoria.registrar(actor, "CREAR", "ANALISTA", analista.getId(), analista.getCodigo());
-        return map(analista);
+        var invitation = invitationService.emitir(analista, actor);
+        return new AnalistaInvitationResponse(map(analista), invitation.token(), invitation.expiresAt());
     }
 
     @Transactional
@@ -123,6 +125,12 @@ public class CatalogoService {
         var usuario = analista.getUsuario();
         String codigo = normalizeCode(request.codigo());
         String email = normalizeEmail(request.email());
+        boolean pendingProfileChanged = usuario.getActivadoEn() == null && (
+                !analista.getCodigo().equals(codigo)
+                        || !usuario.getEmail().equalsIgnoreCase(email)
+                        || !usuario.getEntidad().getId().equals(request.entidadId())
+                        || !usuario.getNombreCompleto().equals(request.nombre().trim())
+        );
         if (!analista.getCodigo().equals(codigo) && analistas.existsByCodigo(codigo)) {
             throw new ConflictException("El codigo del analista ya esta registrado");
         }
@@ -133,11 +141,17 @@ public class CatalogoService {
         usuario.setNombreCompleto(request.nombre().trim());
         usuario.setEmail(email);
         usuario.setEntidad(entidad);
+        if (usuario.getActivadoEn() == null && request.disponible()) {
+            throw new BadRequestException("El analista debe activar su cuenta antes de ser habilitado");
+        }
         syncAccess(analista, usuario, request.disponible());
         usuarios.save(usuario);
 
         analista.setCodigo(codigo);
         analista = analistas.save(analista);
+        if (pendingProfileChanged) {
+            invitationService.revocar(analista.getId(), actor);
+        }
         auditoria.registrar(actor, "ACTUALIZAR", "ANALISTA", analista.getId(), analista.getCodigo());
         return map(analista);
     }
@@ -146,6 +160,9 @@ public class CatalogoService {
     public AnalistaResponse cambiarEstadoAnalista(Long id, CambioEstadoAnalistaRequest request, String actor) {
         var analista = analistas.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
+        if (analista.getUsuario().getActivadoEn() == null && request.disponible()) {
+            throw new BadRequestException("El analista debe activar su cuenta antes de ser habilitado");
+        }
         syncAccess(analista, analista.getUsuario(), request.disponible());
         usuarios.save(analista.getUsuario());
         analista = analistas.save(analista);
@@ -161,10 +178,21 @@ public class CatalogoService {
         var analista = analistas.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
         var usuario = analista.getUsuario();
+        if (usuario.getActivadoEn() == null) {
+            throw new BadRequestException("La cuenta pendiente debe activarse mediante una invitacion");
+        }
         usuario.setPasswordHash(encoder.encode(request.password()));
         usuario.setSessionVersion(usuario.getSessionVersion() + 1);
         usuarios.save(usuario);
         auditoria.registrar(actor, "RESTABLECER_PASSWORD", "ANALISTA", analista.getId(), analista.getCodigo());
+    }
+
+    @Transactional
+    public AnalistaInvitationResponse regenerarInvitacion(Long id, String actor) {
+        var analista = analistas.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Analista no encontrado"));
+        var invitation = invitationService.emitir(analista, actor);
+        return new AnalistaInvitationResponse(map(analista), invitation.token(), invitation.expiresAt());
     }
 
     private void syncAccess(Analista analista, Usuario usuario, boolean enabled) {
@@ -204,6 +232,8 @@ public class CatalogoService {
         return new AnalistaResponse(
                 analista.getId(), analista.getCodigo(), usuario.getNombreCompleto(), usuario.getEmail(),
                 analista.isDisponible(),
+                usuario.getActivadoEn() == null ? "PENDING_ACTIVATION"
+                        : usuario.isActivo() && analista.isDisponible() ? "ACTIVE" : "DISABLED",
                 usuario.getEntidad() == null ? null : usuario.getEntidad().getId(),
                 usuario.getEntidad() == null ? null : usuario.getEntidad().getRazonSocial()
         );

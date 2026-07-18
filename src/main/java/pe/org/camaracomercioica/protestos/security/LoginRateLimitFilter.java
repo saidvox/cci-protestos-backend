@@ -19,6 +19,7 @@ import java.util.concurrent.*;
 public class LoginRateLimitFilter extends OncePerRequestFilter {
     private static final int LOGIN_MAX = 10;
     private static final int LOOKUP_MAX = 30;
+    private static final int ACTIVATION_MAX = 20;
     private static final Duration WINDOW = Duration.ofMinutes(15);
     private final ObjectMapper mapper;
     private final ConcurrentMap<String, Window> attempts = new ConcurrentHashMap<>();
@@ -27,7 +28,8 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(@NonNull HttpServletRequest r) {
         boolean login = "POST".equals(r.getMethod()) && "/api/auth/login".equals(r.getRequestURI());
         boolean lookup = "GET".equals(r.getMethod()) && "/api/v1/auth/debtor-lookup".equals(r.getRequestURI());
-        return !login && !lookup;
+        boolean activation = "/api/v1/auth/analyst-activation".equals(r.getRequestURI());
+        return !login && !lookup && !activation;
     }
 
     @Override
@@ -46,7 +48,9 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
                         ? new Window(now, 1)
                         : new Window(old.started, old.count + 1)
         );
-        int max = "/api/auth/login".equals(req.getRequestURI()) ? LOGIN_MAX : LOOKUP_MAX;
+        int max = "/api/auth/login".equals(req.getRequestURI())
+                ? LOGIN_MAX
+                : "/api/v1/auth/analyst-activation".equals(req.getRequestURI()) ? ACTIVATION_MAX : LOOKUP_MAX;
         if (w.count > max) {
             res.setStatus(429);
             res.setContentType(MediaType.APPLICATION_JSON_VALUE);

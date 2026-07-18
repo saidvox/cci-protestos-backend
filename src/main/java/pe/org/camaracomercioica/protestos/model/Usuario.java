@@ -55,6 +55,8 @@ public class Usuario {
     @Column(nullable = false, updatable = false)
     private Instant creadoEn = Instant.now();
 
+    private Instant activadoEn;
+
     public String getTipoDocumento() {
         return deudor == null ? null : deudor.getTipoDocumento().name();
     }
