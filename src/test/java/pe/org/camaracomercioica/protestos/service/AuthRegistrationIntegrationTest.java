@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import pe.org.camaracomercioica.protestos.dto.RegisterRequest;
 import pe.org.camaracomercioica.protestos.exception.ConflictException;
+import pe.org.camaracomercioica.protestos.exception.BadRequestException;
 import pe.org.camaracomercioica.protestos.model.Deudor;
 import pe.org.camaracomercioica.protestos.model.Rol;
 import pe.org.camaracomercioica.protestos.model.TipoDocumento;
@@ -45,6 +46,7 @@ class AuthRegistrationIntegrationTest {
 
         var usuario = usuarios.findByEmailIgnoreCase("registro.deudor@test.local").orElseThrow();
         assertThat(usuario.getDeudor().getId()).isEqualTo(deudor.getId());
+        assertThat(usuario.getNombreCompleto()).isEqualTo("Deudor Importado Excel");
         var asociado = deudores.findById(deudor.getId()).orElseThrow();
         assertThat(asociado.getTipoDocumento()).isEqualTo(TipoDocumento.DNI);
         assertThat(asociado.getNumeroDocumento()).isEqualTo("73451290");
@@ -52,28 +54,30 @@ class AuthRegistrationIntegrationTest {
     }
 
     @Test
-    void registroPublicoCreaDeudorSiDocumentoNoExiste() {
+    void registroPublicoRechazaDocumentoQueNoExisteEnElPadron() {
         ensureDebtorRole();
 
-        authService.register(new RegisterRequest(
+        assertThatThrownBy(() -> authService.register(new RegisterRequest(
                 "Empresa Nueva SAC",
                 "empresa.nueva@test.local",
                 "Password123",
                 "RUC",
                 "20612345678"
-        ));
+        ))).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("no figura en el registro de protestos");
 
-        var usuario = usuarios.findByEmailIgnoreCase("empresa.nueva@test.local").orElseThrow();
-        assertThat(usuario.getDeudor()).isNotNull();
-        var deudor = deudores.findById(usuario.getDeudor().getId()).orElseThrow();
-        assertThat(deudor.getTipoDocumento()).isEqualTo(TipoDocumento.RUC);
-        assertThat(deudor.getNumeroDocumento()).isEqualTo("20612345678");
-        assertThat(deudor.getTipoPersona()).isEqualTo(TipoPersona.JURIDICA);
+        assertThat(usuarios.findByEmailIgnoreCase("empresa.nueva@test.local")).isEmpty();
     }
 
     @Test
     void registroPublicoRechazaDocumentoQueYaTieneCuenta() {
         ensureDebtorRole();
+        var deudor = new Deudor();
+        deudor.setTipoDocumento(TipoDocumento.DNI);
+        deudor.setNumeroDocumento("73451291");
+        deudor.setNombreRazonSocial("Usuario Existente");
+        deudor.setTipoPersona(TipoPersona.NATURAL);
+        deudores.save(deudor);
         authService.register(new RegisterRequest("Primer Usuario", "primer.usuario@test.local", "Password123", "DNI", "73451291"));
 
         assertThatThrownBy(() -> authService.register(new RegisterRequest(

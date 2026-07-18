@@ -17,7 +17,6 @@ import pe.org.camaracomercioica.protestos.exception.UnauthorizedException;
 import pe.org.camaracomercioica.protestos.model.Deudor;
 import pe.org.camaracomercioica.protestos.model.Rol;
 import pe.org.camaracomercioica.protestos.model.TipoDocumento;
-import pe.org.camaracomercioica.protestos.model.TipoPersona;
 import pe.org.camaracomercioica.protestos.model.Usuario;
 import pe.org.camaracomercioica.protestos.repository.DeudorRepository;
 import pe.org.camaracomercioica.protestos.repository.RolRepository;
@@ -67,7 +66,9 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("Rol de deudor no configurado en el sistema."));
 
         Deudor deudor = deudores.findByTipoDocumentoAndNumeroDocumento(tipoDocumento, numeroDocumento)
-                .orElseGet(() -> nuevoDeudor(tipoDocumento, numeroDocumento, request.nombreCompleto().trim(), email));
+                .orElseThrow(() -> new BadRequestException(
+                        "El documento no figura en el registro de protestos. Verifique el numero ingresado."
+                ));
         if (deudor.getEmail() == null || deudor.getEmail().isBlank()) {
             deudor.setEmail(email);
         }
@@ -75,7 +76,7 @@ public class AuthService {
         deudor = deudores.save(deudor);
 
         Usuario user = new Usuario();
-        user.setNombreCompleto(request.nombreCompleto().trim());
+        user.setNombreCompleto(deudor.getNombreRazonSocial());
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRol(role);
@@ -160,16 +161,6 @@ public class AuthService {
         if (tipo == TipoDocumento.CE && !numero.matches("[A-Z0-9]{8,12}")) {
             throw new BadRequestException("El CE debe tener entre 8 y 12 caracteres alfanumericos.");
         }
-    }
-
-    private Deudor nuevoDeudor(TipoDocumento tipoDocumento, String numeroDocumento, String nombre, String email) {
-        var deudor = new Deudor();
-        deudor.setTipoDocumento(tipoDocumento);
-        deudor.setNumeroDocumento(numeroDocumento);
-        deudor.setNombreRazonSocial(nombre);
-        deudor.setTipoPersona(tipoDocumento == TipoDocumento.RUC ? TipoPersona.JURIDICA : TipoPersona.NATURAL);
-        deudor.setEmail(email);
-        return deudor;
     }
 
     public record DeudorLookup(boolean found, String nombreCompleto) {
